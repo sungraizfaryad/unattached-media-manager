@@ -1,0 +1,1068 @@
+/**
+ * Media Usage Inspector Admin Styles
+ */
+
+/* Admin wrap */
+.mui-admin-wrap {
+    max-width: 1200px;
+}
+
+/* Stats grid */
+.mui-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.mui-stat-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+}
+
+.mui-stat-card.mui-stat-success {
+    border-left: 4px solid #00a32a;
+}
+
+.mui-stat-card.mui-stat-warning {
+    border-left: 4px solid #dba617;
+}
+
+.mui-stat-card.mui-stat-info {
+    border-left: 4px solid #72aee6;
+    background: #f0f6fc;
+}
+
+.mui-stat-number {
+    display: block;
+    font-size: 32px;
+    font-weight: 600;
+    color: #1d2327;
+    line-height: 1.2;
+}
+
+.mui-stat-label {
+    display: block;
+    font-size: 13px;
+    color: #50575e;
+    margin-top: 5px;
+}
+
+/* Panels */
+.mui-panel {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.mui-panel h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+/* Scan status */
+.mui-scan-status {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.mui-status-badge {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.mui-status-success {
+    background: #d7f7dc;
+    color: #006b1a;
+}
+
+.mui-status-running {
+    background: #fcf9e8;
+    color: #8a6d14;
+}
+
+.mui-status-pending {
+    background: #f0f0f1;
+    color: #50575e;
+}
+
+.mui-status-warning {
+    background: #fcf9e8;
+    color: #8a6d14;
+}
+
+/* Pulse animation for running indicator */
+.mui-pulse {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #00a32a;
+    border-radius: 50%;
+    margin-left: 8px;
+    animation: mui-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes mui-pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Progress bar */
+.mui-progress-bar {
+    flex: 1;
+    height: 20px;
+    background: #f0f0f1;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.mui-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2271b1, #135e96);
+    transition: width 0.3s ease;
+}
+
+.mui-progress-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1d2327;
+    min-width: 50px;
+    text-align: right;
+}
+
+/* Scan actions */
+.mui-scan-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Usage panel (in media modal) */
+.mui-usage-panel {
+    padding: 10px 0;
+}
+
+.mui-usage-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.mui-usage-count {
+    font-weight: 500;
+}
+
+.mui-usage-found {
+    color: #00a32a;
+}
+
+.mui-usage-none {
+    color: #787c82;
+}
+
+.mui-safe-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #d7f7dc;
+    color: #006b1a;
+    border-radius: 3px;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+/* Reference list */
+.mui-reference-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.mui-reference-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.mui-reference-item:last-child {
+    border-bottom: none;
+}
+
+.mui-ref-context {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #f0f0f1;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #50575e;
+}
+
+.mui-ref-source {
+    flex: 1;
+    font-size: 13px;
+    color: #1d2327;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mui-ref-edit {
+    font-size: 12px;
+    text-decoration: none;
+}
+
+.mui-view-all {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f1;
+}
+
+.mui-usage-actions {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #f0f0f1;
+}
+
+/* Media library column */
+.mui-col-usage {
+    display: inline-block;
+    min-width: 24px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.mui-col-used {
+    background: #d7f7dc;
+    color: #006b1a;
+}
+
+.mui-col-unused {
+    background: #f0f0f1;
+    color: #787c82;
+}
+
+.mui-col-safe {
+    vertical-align: middle;
+    margin-left: 5px;
+    color: #00a32a;
+}
+
+/* Attachment details in modal */
+.attachment-details .setting[data-setting="mui_usage"] {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #dcdcde;
+}
+
+.attachment-details .setting[data-setting="mui_usage"] .name {
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+/* Tables */
+.mui-panel table.wp-list-table {
+    border: none;
+}
+
+.mui-panel table.wp-list-table thead th {
+    background: #f6f7f7;
+}
+
+/* Responsive */
+@media screen and (max-width: 782px) {
+    .mui-stats-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .mui-scan-status {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .mui-progress-bar {
+        width: 100%;
+    }
+
+    .mui-scan-actions {
+        flex-direction: column;
+    }
+
+    .mui-scan-actions .button {
+        width: 100%;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .mui-stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Loading state */
+.mui-loading {
+    position: relative;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.mui-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #f0f0f1;
+    border-top-color: #2271b1;
+    border-radius: 50%;
+    animation: mui-spin 0.8s linear infinite;
+}
+
+@keyframes mui-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Notice styling */
+.mui-notice {
+    padding: 12px 15px;
+    margin: 15px 0;
+    border-left: 4px solid #2271b1;
+    background: #f0f6fc;
+}
+
+.mui-notice.mui-notice-warning {
+    border-color: #dba617;
+    background: #fcf9e8;
+}
+
+.mui-notice.mui-notice-error {
+    border-color: #d63638;
+    background: #fcf0f1;
+}
+
+.mui-notice.mui-notice-success {
+    border-color: #00a32a;
+    background: #edfaef;
+}
+
+/* Attach panel */
+.mui-attach-panel {
+    border-left: 4px solid #72aee6;
+    background: #f0f6fc;
+}
+
+.mui-attach-panel h2 {
+    color: #135e96;
+}
+
+.mui-attach-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.mui-success-message {
+    color: #00a32a;
+    font-weight: 500;
+}
+
+.mui-error-message {
+    color: #d63638;
+    font-weight: 500;
+}
+
+/* Tab badge for history count */
+.mui-tab-badge {
+    display: inline-block;
+    background: #d63638;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 9px;
+    padding: 0 5px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.nav-tab-active .mui-tab-badge {
+    background: #2271b1;
+}
+
+/* History tab smaller stats */
+.mui-stats-small .mui-stat-card {
+    padding: 15px;
+}
+
+.mui-stats-small .mui-stat-number {
+    font-size: 24px;
+}
+
+.mui-stats-small .mui-stat-label {
+    font-size: 12px;
+}
+
+/* History filters */
+.mui-history-filters {
+    position: relative;
+}
+
+.mui-history-filters .subsubsub {
+    margin: 0;
+}
+
+/* History table styles */
+#mui-history-table th.check-column,
+#mui-history-table td.check-column {
+    width: 30px;
+    padding: 8px;
+}
+
+#mui-history-table .check-column input[type="checkbox"] {
+    margin: 0;
+}
+
+#mui-history-table td {
+    vertical-align: middle;
+}
+
+#mui-history-table img {
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* History table thumbnail column */
+#mui-history-table .dashicons-media-default {
+    display: block;
+    background: #f0f0f1;
+    border-radius: 4px;
+}
+
+/* History status badges - smaller for table */
+#mui-history-table .mui-status-badge {
+    padding: 3px 8px;
+    font-size: 11px;
+}
+
+/* History row hover */
+#mui-history-table tbody tr:hover {
+    background-color: #f6f7f7;
+}
+
+/* History revert button */
+#mui-history-table .button-small {
+    font-size: 11px;
+    padding: 2px 8px;
+    line-height: 1.4;
+    min-height: 24px;
+}
+
+/* Empty state in history */
+.mui-panel p.description[style*="text-align: center"] {
+    color: #787c82;
+    font-style: italic;
+    padding: 40px 20px;
+    background: #f6f7f7;
+    border-radius: 4px;
+}
+
+/* Bulk actions container */
+.mui-history-filters .alignright {
+    float: right;
+}
+
+/* Pagination styles */
+.tablenav-pages .pagination-links a,
+.tablenav-pages .pagination-links span {
+    padding: 4px 8px;
+    margin: 0 2px;
+    text-decoration: none;
+}
+
+.tablenav-pages .pagination-links .current {
+    background: #2271b1;
+    color: #fff;
+    border-radius: 3px;
+}
+
+/* Description text in table cells */
+#mui-history-table .description {
+    color: #787c82;
+    font-size: 12px;
+}
+
+/* Warning badge for unused tab */
+.mui-tab-badge.mui-badge-warning {
+    background: #dba617;
+}
+
+.mui-tab-badge.mui-badge-info {
+    background: #72aee6;
+}
+
+/* Unused media table */
+#mui-unused-table th.check-column,
+#mui-unused-table td.check-column,
+#mui-unattached-table th.check-column,
+#mui-unattached-table td.check-column {
+    width: 30px;
+    padding: 8px;
+}
+
+/* Reference count badge */
+.mui-reference-count {
+    display: inline-block;
+    background: #72aee6;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 9px;
+    padding: 0 6px;
+    margin-right: 4px;
+}
+
+#mui-unused-table .check-column input[type="checkbox"] {
+    margin: 0;
+}
+
+#mui-unused-table td {
+    vertical-align: middle;
+}
+
+#mui-unused-table img {
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+#mui-unused-table tbody tr:hover {
+    background-color: #f6f7f7;
+}
+
+#mui-unused-table .button-small {
+    font-size: 11px;
+    padding: 2px 8px;
+    line-height: 1.4;
+    min-height: 24px;
+    margin-right: 5px;
+}
+
+/* Delete button styling */
+.button-link-delete {
+    color: #b32d2e !important;
+    border-color: #b32d2e !important;
+}
+
+.button-link-delete:hover {
+    background: #b32d2e !important;
+    color: #fff !important;
+}
+
+.button-link-delete:disabled {
+    color: #a7aaad !important;
+    border-color: #a7aaad !important;
+    background: transparent !important;
+}
+
+/* Unused media filters */
+.mui-unused-filters {
+    position: relative;
+}
+
+.mui-unused-filters .subsubsub {
+    margin: 0;
+}
+
+.mui-unused-filters .alignright {
+    float: right;
+}
+
+.mui-unused-filters .alignright .button {
+    margin-left: 5px;
+}
+
+/* Empty trash button */
+#mui-empty-trash {
+    margin-right: 10px;
+}
+
+/* ========================================
+   Global Job Status Bar
+   ======================================== */
+.mui-job-status-bar {
+    background: linear-gradient(135deg, #f0f6fc 0%, #e8f4fd 100%);
+    border: 1px solid #72aee6;
+    border-left: 4px solid #2271b1;
+    border-radius: 4px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    position: sticky;
+    top: 32px;
+    z-index: 100;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+@media screen and (max-width: 782px) {
+    .mui-job-status-bar {
+        top: 46px;
+    }
+}
+
+.mui-job-status-inner {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.mui-job-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.mui-job-progress-text {
+    font-size: 13px;
+    color: #1d2327;
+    font-weight: 500;
+}
+
+.mui-job-progress-bar {
+    flex: 2;
+    min-width: 150px;
+    height: 20px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.mui-job-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.mui-job-note {
+    margin: 10px 0 0 0;
+    font-size: 12px;
+    color: #50575e;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.mui-job-note .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    color: #72aee6;
+}
+
+/* Job completed state */
+.mui-job-status-bar.mui-job-completed {
+    background: linear-gradient(135deg, #edfaef 0%, #d7f7dc 100%);
+    border-color: #00a32a;
+    border-left-color: #00a32a;
+}
+
+/* Job paused state */
+.mui-job-status-bar.mui-job-paused {
+    background: linear-gradient(135deg, #fcf9e8 0%, #f7f3dc 100%);
+    border-color: #dba617;
+    border-left-color: #dba617;
+}
+
+/* Job cancelled/error state */
+.mui-job-status-bar.mui-job-cancelled {
+    background: linear-gradient(135deg, #fcf0f1 0%, #f9e5e6 100%);
+    border-color: #d63638;
+    border-left-color: #d63638;
+}
+
+/* Hide job status bar when no job */
+.mui-job-status-bar.mui-job-hidden {
+    display: none;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 600px) {
+    .mui-job-status-inner {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mui-job-info {
+        justify-content: space-between;
+    }
+
+    .mui-job-progress-bar {
+        width: 100%;
+    }
+
+    .mui-job-actions {
+        justify-content: flex-end;
+    }
+}
+
+/* Animation for job running */
+.mui-job-status-bar.mui-job-running .mui-progress-fill {
+    background: linear-gradient(90deg, #2271b1, #135e96, #2271b1);
+    background-size: 200% 100%;
+    animation: mui-progress-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes mui-progress-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* ========================================
+   Custom Confirmation Modal
+   ======================================== */
+.mui-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 100100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.mui-modal-overlay.mui-modal-visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.mui-modal {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    max-width: 480px;
+    width: 90%;
+    transform: scale(0.9);
+    transition: transform 0.2s ease;
+}
+
+.mui-modal-overlay.mui-modal-visible .mui-modal {
+    transform: scale(1);
+}
+
+.mui-modal-header {
+    padding: 20px 24px 15px;
+    border-bottom: 1px solid #f0f0f1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mui-modal-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.mui-modal-icon .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.mui-modal-icon.mui-modal-icon-warning {
+    background: #fcf9e8;
+    color: #8a6d14;
+}
+
+.mui-modal-icon.mui-modal-icon-danger {
+    background: #fcf0f1;
+    color: #d63638;
+}
+
+.mui-modal-icon.mui-modal-icon-info {
+    background: #f0f6fc;
+    color: #2271b1;
+}
+
+.mui-modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1d2327;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.mui-modal-body {
+    padding: 20px 24px;
+}
+
+.mui-modal-message {
+    font-size: 14px;
+    color: #50575e;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.mui-modal-footer {
+    padding: 15px 24px 20px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.mui-modal-footer .button {
+    min-width: 100px;
+    justify-content: center;
+}
+
+/* Modal button states */
+.mui-modal-footer .button-primary {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: #fff;
+}
+
+.mui-modal-footer .button-primary:hover {
+    background: #135e96;
+    border-color: #135e96;
+}
+
+.mui-modal-footer .button-danger {
+    background: #d63638;
+    border-color: #d63638;
+    color: #fff;
+}
+
+.mui-modal-footer .button-danger:hover {
+    background: #b32d2e;
+    border-color: #b32d2e;
+}
+
+/* Responsive modal */
+@media screen and (max-width: 480px) {
+    .mui-modal {
+        width: 95%;
+        margin: 10px;
+    }
+
+    .mui-modal-header {
+        padding: 15px 18px 12px;
+    }
+
+    .mui-modal-body {
+        padding: 15px 18px;
+    }
+
+    .mui-modal-footer {
+        padding: 12px 18px 15px;
+        flex-direction: column-reverse;
+    }
+
+    .mui-modal-footer .button {
+        width: 100%;
+    }
+}
+
+/* ========================================
+   Processing Mode Selection Modal
+   ======================================== */
+.mui-modal.mui-modal-wide {
+    max-width: 560px;
+}
+
+.mui-processing-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 15px 0;
+}
+
+.mui-processing-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 15px;
+    border: 2px solid #dcdcde;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #fff;
+}
+
+.mui-processing-option:hover {
+    border-color: #2271b1;
+    background: #f0f6fc;
+}
+
+.mui-processing-option.mui-processing-option-selected {
+    border-color: #2271b1;
+    background: #f0f6fc;
+    box-shadow: 0 0 0 1px #2271b1;
+}
+
+.mui-processing-option input[type="radio"] {
+    margin: 3px 0 0 0;
+    flex-shrink: 0;
+}
+
+.mui-option-content {
+    flex: 1;
+}
+
+.mui-option-content strong {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #1d2327;
+    margin-bottom: 6px;
+}
+
+.mui-option-content strong .dashicons {
+    color: #2271b1;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.mui-option-content p {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #50575e;
+    line-height: 1.4;
+}
+
+.mui-option-content p:last-child {
+    margin-bottom: 0;
+}
+
+.mui-option-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    font-size: 12px !important;
+    color: #787c82 !important;
+    background: #f6f7f7;
+    padding: 8px 10px;
+    border-radius: 4px;
+    margin-top: 8px !important;
+}
+
+.mui-option-note .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.mui-option-note .dashicons-info {
+    color: #72aee6;
+}
+
+.mui-option-note .dashicons-warning {
+    color: #dba617;
+}
+
+.mui-recommended-badge {
+    display: inline-block;
+    background: #00a32a;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    margin-left: auto;
+}
+
+.mui-modal-footer-note {
+    font-size: 12px;
+    color: #787c82;
+    margin: 15px 0 0 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.mui-modal-footer-note .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    color: #72aee6;
+}
+
+/* Responsive processing mode modal */
+@media screen and (max-width: 480px) {
+    .mui-modal.mui-modal-wide {
+        max-width: 100%;
+    }
+
+    .mui-processing-option {
+        padding: 12px;
+    }
+
+    .mui-option-content strong {
+        flex-wrap: wrap;
+    }
+
+    .mui-recommended-badge {
+        margin-left: 0;
+        margin-top: 5px;
+    }
+}

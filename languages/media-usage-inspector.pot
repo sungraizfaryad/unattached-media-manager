@@ -1,0 +1,327 @@
+# Copyright (C) 2024 Developer
+# This file is distributed under the GPL v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Media Usage Inspector 1.0.0\n"
+"Report-Msgid-Bugs-To: https://developer.dev/support\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2024-01-21T00:00:00+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI\n"
+"X-Domain: media-usage-inspector\n"
+
+#: includes/admin/class-mui-admin.php
+msgid "Media Usage Inspector"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Usage Inspector"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Dashboard"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Settings"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Total Media Files"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "In Use"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Potentially Unused"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Used but Unattached"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Total References"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Fix Unattached Media"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Background Scan"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Scanning runs in the background using WordPress Cron. You can close your browser and the scan will continue automatically."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Index Up to Date"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Scanning in Background"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Scan Paused"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Not Indexed"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Currently scanning: %s"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Pause Scan"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Stop Scan"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Resume Scan"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Start Full Scan"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Export Report (CSV)"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "References by Context"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Context"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Count"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Potentially Unused Media"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "These media files have no detected references. Always verify before deleting."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Resource Management"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Resource Mode"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Auto (Recommended)"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Low Resources"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "High Performance"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Auto-Resume Scan"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Automatically resume scanning when you return to the page"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Server Information"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "PHP Memory Limit"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Current Memory Usage"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Max Execution Time"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Recommended Batch Size"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "PHP Version"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Attachment Settings"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Auto-Attach Media"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Scan Sources"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Content to Scan"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Post Content"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Featured Images"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Gutenberg Blocks"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "ACF Fields"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Widgets"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Theme Options & Settings"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Save Settings"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Settings saved."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Scanning..."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Scan completed!"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "An error occurred."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "This will re-scan your entire site. Continue?"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "No references found"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Attaching..."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "This will attach all used media to the posts where they are found. Continue?"
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Successfully attached %d media files."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Resuming scan..."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Pausing..."
+msgstr ""
+
+#: includes/admin/class-mui-admin.php
+msgid "Stopping..."
+msgstr ""
+
+#: includes/class-mui-scanner.php
+msgid "Post scan completed."
+msgstr ""
+
+#: includes/class-mui-scanner.php
+msgid "Processed %d posts."
+msgstr ""
+
+#: includes/class-mui-scanner.php
+msgid "Found %d option references."
+msgstr ""
+
+#: includes/class-mui-scanner.php
+msgid "Found %d widget references."
+msgstr ""
+
+#: includes/class-mui-scanner.php
+msgid "Full scan started."
+msgstr ""
+
+#: includes/class-mui-scanner.php
+msgid "Featured Image"
+msgstr ""
+
+#: includes/class-mui-background-processor.php
+msgid "A scan is already running."
+msgstr ""
+
+#: includes/class-mui-background-processor.php
+msgid "Background scan started."
+msgstr ""
+
+#: includes/class-mui-background-processor.php
+msgid "No scan is currently running."
+msgstr ""
+
+#: includes/class-mui-background-processor.php
+msgid "Scan paused."
+msgstr ""
+
+#: includes/class-mui-background-processor.php
+msgid "No paused scan to resume."
+msgstr ""
+
+#: includes/class-mui-background-processor.php
+msgid "Scan resumed."
+msgstr ""
+
+#: includes/class-mui-background-processor.php
+msgid "Scan stopped."
+msgstr ""
+
+#: includes/class-mui-background-processor.php
+msgid "Insufficient permissions."
+msgstr ""
+
+#: includes/class-mui-resource-monitor.php
+msgid "Every Minute"
+msgstr ""
