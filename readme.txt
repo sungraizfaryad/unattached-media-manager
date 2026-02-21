@@ -8,7 +8,7 @@ Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Fix WordPress's broken "Unattached" media filter. Properly attach media files that are in use, so you can manage your library using WordPress's native tools.
+Fix the WordPress Unattached media filter. Automatically attach used media files to their posts so you can safely clean up your library.
 
 == Description ==
 

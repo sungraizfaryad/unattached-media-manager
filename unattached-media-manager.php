@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Unattached Media Manager
  * Plugin URI: https://wordpress.org/plugins/unattached-media-manager/
- * Description: Fix WordPress's broken "Unattached" media filter. Properly attach media used in ACF, Gutenberg, page builders, widgets & more — so you can manage your library with WordPress's native tools.
- * Version: 1.0.2
+ * Description: Fix the WordPress Unattached media filter. Automatically attach used media files to their posts so you can safely clean up your library.
+ * Version: 1.0.3
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author: Sungraiz Faryad
