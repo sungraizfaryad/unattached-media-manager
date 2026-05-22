@@ -399,10 +399,14 @@ class UNMAM_Database {
         global $wpdb;
 
         $defaults = array(
-            'per_page' => 20,
-            'page'     => 1,
-            'orderby'  => 'ID',
-            'order'    => 'DESC',
+            'per_page'  => 20,
+            'page'      => 1,
+            'orderby'   => 'ID',
+            'order'     => 'DESC',
+            's'         => '',  // Filename / title search
+            'mime_type' => '',  // e.g. 'image', 'image/jpeg', 'video', 'application/pdf'
+            'date_from' => '',  // YYYY-MM-DD
+            'date_to'   => '',  // YYYY-MM-DD
         );
 
         $args   = wp_parse_args( $args, $defaults );
@@ -414,34 +418,68 @@ class UNMAM_Database {
         $orderby = in_array( $args['orderby'], $allowed_orderby, true ) ? $args['orderby'] : 'ID';
         $order = 'ASC' === strtoupper( $args['order'] ) ? 'ASC' : 'DESC';
 
+        // Build optional WHERE clauses for filters
+        $where_extra = '';
+        $where_params = array();
+
+        if ( '' !== $args['s'] ) {
+            $like = '%' . $wpdb->esc_like( $args['s'] ) . '%';
+            $where_extra .= ' AND (p.post_title LIKE %s OR p.guid LIKE %s)';
+            $where_params[] = $like;
+            $where_params[] = $like;
+        }
+
+        if ( '' !== $args['mime_type'] ) {
+            $mime = $args['mime_type'];
+            if ( false === strpos( $mime, '/' ) ) {
+                // Group like 'image' -> 'image/%'
+                $where_extra .= ' AND p.post_mime_type LIKE %s';
+                $where_params[] = $mime . '/%';
+            } else {
+                $where_extra .= ' AND p.post_mime_type = %s';
+                $where_params[] = $mime;
+            }
+        }
+
+        if ( '' !== $args['date_from'] ) {
+            $where_extra .= ' AND p.post_date >= %s';
+            $where_params[] = $args['date_from'] . ' 00:00:00';
+        }
+
+        if ( '' !== $args['date_to'] ) {
+            $where_extra .= ' AND p.post_date <= %s';
+            $where_params[] = $args['date_to'] . ' 23:59:59';
+        }
+
+        $base_where = "WHERE p.post_type = 'attachment'
+            AND p.post_status != 'trash'
+            AND r.attachment_id IS NULL" . $where_extra;
+
         // Get total count
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are safely generated
-        $total = (int) $wpdb->get_var(
-            "SELECT COUNT(*)
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are safely generated; user values are bound via $where_params
+        $count_sql = "SELECT COUNT(*)
             FROM {$wpdb->posts} p
             LEFT JOIN {$table} r ON p.ID = r.attachment_id
-            WHERE p.post_type = 'attachment'
-            AND p.post_status != 'trash'
-            AND r.attachment_id IS NULL"
-        );
+            {$base_where}";
+
+        if ( ! empty( $where_params ) ) {
+            $total = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $where_params ) );
+        } else {
+            $total = (int) $wpdb->get_var( $count_sql );
+        }
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         // Get items with details
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names and orderby/order are safely generated
-        $results = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT p.ID, p.post_title, p.guid, p.post_date, p.post_mime_type, p.post_parent
-                FROM {$wpdb->posts} p
-                LEFT JOIN {$table} r ON p.ID = r.attachment_id
-                WHERE p.post_type = 'attachment'
-                AND p.post_status != 'trash'
-                AND r.attachment_id IS NULL
-                ORDER BY p.{$orderby} {$order}
-                LIMIT %d OFFSET %d",
-                $args['per_page'],
-                $offset
-            )
-        );
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names and orderby/order are safely generated; user values are bound via prepare
+        $items_sql = "SELECT p.ID, p.post_title, p.guid, p.post_date, p.post_mime_type, p.post_parent
+            FROM {$wpdb->posts} p
+            LEFT JOIN {$table} r ON p.ID = r.attachment_id
+            {$base_where}
+            ORDER BY p.{$orderby} {$order}
+            LIMIT %d OFFSET %d";
+
+        $prepare_args = array_merge( $where_params, array( $args['per_page'], $offset ) );
+        $results = $wpdb->get_results( $wpdb->prepare( $items_sql, $prepare_args ) );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
         // Add thumbnail URLs and file sizes

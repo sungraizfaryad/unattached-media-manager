@@ -1190,6 +1190,23 @@ class UNMAM_Admin {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- View toggle, no action taken
         $view = isset( $_GET['view'] ) ? sanitize_text_field( wp_unslash( $_GET['view'] ) ) : 'unused';
 
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only filter params, no action taken
+        $filter_s         = isset( $_GET['mui_s'] ) ? sanitize_text_field( wp_unslash( $_GET['mui_s'] ) ) : '';
+        $filter_mime      = isset( $_GET['mui_mime'] ) ? sanitize_text_field( wp_unslash( $_GET['mui_mime'] ) ) : '';
+        $filter_date_from = isset( $_GET['mui_date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['mui_date_from'] ) ) : '';
+        $filter_date_to   = isset( $_GET['mui_date_to'] ) ? sanitize_text_field( wp_unslash( $_GET['mui_date_to'] ) ) : '';
+        // phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+        // Validate date format (YYYY-MM-DD) — drop invalid values silently
+        if ( $filter_date_from && ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filter_date_from ) ) {
+            $filter_date_from = '';
+        }
+        if ( $filter_date_to && ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $filter_date_to ) ) {
+            $filter_date_to = '';
+        }
+
+        $has_filters = ( '' !== $filter_s || '' !== $filter_mime || '' !== $filter_date_from || '' !== $filter_date_to );
+
         $unused_count = UNMAM_Database::get_unused_count();
         $trash_count = UNMAM_Database::get_trashed_count();
 
@@ -1200,8 +1217,12 @@ class UNMAM_Admin {
             ) );
         } else {
             $media = UNMAM_Database::get_unused_attachments_detailed( array(
-                'per_page' => $per_page,
-                'page'     => $current_page,
+                'per_page'  => $per_page,
+                'page'      => $current_page,
+                's'         => $filter_s,
+                'mime_type' => $filter_mime,
+                'date_from' => $filter_date_from,
+                'date_to'   => $filter_date_to,
             ) );
         }
 
@@ -1270,15 +1291,17 @@ class UNMAM_Admin {
                             <?php esc_html_e( 'Delete Permanently', 'unattached-media-manager' ); ?>
                         </button>
                     <?php elseif ( 'unused' === $view && $unused_count > 0 ) : ?>
-                        <button type="button" class="button button-link-delete" id="mui-trash-all-unused">
-                            <?php
-                            printf(
-                                /* translators: %d: number of media files */
-                                esc_html__( 'Trash All %d Unused', 'unattached-media-manager' ),
-                                intval( $unused_count )
-                            );
-                            ?>
-                        </button>
+                        <?php if ( ! $has_filters ) : ?>
+                            <button type="button" class="button button-link-delete" id="mui-trash-all-unused">
+                                <?php
+                                printf(
+                                    /* translators: %d: number of media files */
+                                    esc_html__( 'Trash All %d Unused', 'unattached-media-manager' ),
+                                    intval( $unused_count )
+                                );
+                                ?>
+                            </button>
+                        <?php endif; ?>
                         <button type="button" class="button button-link-delete" id="mui-trash-selected" disabled>
                             <?php esc_html_e( 'Trash Selected', 'unattached-media-manager' ); ?>
                         </button>
@@ -1287,6 +1310,86 @@ class UNMAM_Admin {
             </div>
 
             <div style="clear: both;"></div>
+
+            <?php if ( 'unused' === $view ) : ?>
+            <!-- Filter form (Unused view only) -->
+            <form method="get" class="mui-unused-filter-form" style="margin: 10px 0 15px; padding: 12px; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px;">
+                <input type="hidden" name="page" value="unattached-media-manager">
+                <input type="hidden" name="tab" value="unused">
+                <input type="hidden" name="view" value="unused">
+
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
+                    <div>
+                        <label for="mui-filter-s" style="display: block; font-weight: 600; font-size: 12px; margin-bottom: 3px;">
+                            <?php esc_html_e( 'Filename / Title', 'unattached-media-manager' ); ?>
+                        </label>
+                        <input type="search" id="mui-filter-s" name="mui_s"
+                               value="<?php echo esc_attr( $filter_s ); ?>"
+                               placeholder="<?php esc_attr_e( 'e.g. logo.png', 'unattached-media-manager' ); ?>"
+                               style="width: 200px;">
+                    </div>
+
+                    <div>
+                        <label for="mui-filter-mime" style="display: block; font-weight: 600; font-size: 12px; margin-bottom: 3px;">
+                            <?php esc_html_e( 'Media Type', 'unattached-media-manager' ); ?>
+                        </label>
+                        <select id="mui-filter-mime" name="mui_mime">
+                            <option value=""><?php esc_html_e( 'All types', 'unattached-media-manager' ); ?></option>
+                            <option value="image" <?php selected( $filter_mime, 'image' ); ?>><?php esc_html_e( 'Images', 'unattached-media-manager' ); ?></option>
+                            <option value="video" <?php selected( $filter_mime, 'video' ); ?>><?php esc_html_e( 'Videos', 'unattached-media-manager' ); ?></option>
+                            <option value="audio" <?php selected( $filter_mime, 'audio' ); ?>><?php esc_html_e( 'Audio', 'unattached-media-manager' ); ?></option>
+                            <option value="application/pdf" <?php selected( $filter_mime, 'application/pdf' ); ?>><?php esc_html_e( 'PDF', 'unattached-media-manager' ); ?></option>
+                            <option value="application" <?php selected( $filter_mime, 'application' ); ?>><?php esc_html_e( 'Documents / other', 'unattached-media-manager' ); ?></option>
+                            <option value="image/jpeg" <?php selected( $filter_mime, 'image/jpeg' ); ?>>&nbsp;&nbsp;<?php esc_html_e( '— JPEG only', 'unattached-media-manager' ); ?></option>
+                            <option value="image/png" <?php selected( $filter_mime, 'image/png' ); ?>>&nbsp;&nbsp;<?php esc_html_e( '— PNG only', 'unattached-media-manager' ); ?></option>
+                            <option value="image/gif" <?php selected( $filter_mime, 'image/gif' ); ?>>&nbsp;&nbsp;<?php esc_html_e( '— GIF only', 'unattached-media-manager' ); ?></option>
+                            <option value="image/webp" <?php selected( $filter_mime, 'image/webp' ); ?>>&nbsp;&nbsp;<?php esc_html_e( '— WebP only', 'unattached-media-manager' ); ?></option>
+                            <option value="image/svg+xml" <?php selected( $filter_mime, 'image/svg+xml' ); ?>>&nbsp;&nbsp;<?php esc_html_e( '— SVG only', 'unattached-media-manager' ); ?></option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="mui-filter-date-from" style="display: block; font-weight: 600; font-size: 12px; margin-bottom: 3px;">
+                            <?php esc_html_e( 'Uploaded from', 'unattached-media-manager' ); ?>
+                        </label>
+                        <input type="date" id="mui-filter-date-from" name="mui_date_from"
+                               value="<?php echo esc_attr( $filter_date_from ); ?>">
+                    </div>
+
+                    <div>
+                        <label for="mui-filter-date-to" style="display: block; font-weight: 600; font-size: 12px; margin-bottom: 3px;">
+                            <?php esc_html_e( 'Uploaded to', 'unattached-media-manager' ); ?>
+                        </label>
+                        <input type="date" id="mui-filter-date-to" name="mui_date_to"
+                               value="<?php echo esc_attr( $filter_date_to ); ?>">
+                    </div>
+
+                    <div>
+                        <button type="submit" class="button button-primary">
+                            <?php esc_html_e( 'Filter', 'unattached-media-manager' ); ?>
+                        </button>
+                        <?php if ( $has_filters ) : ?>
+                            <a href="<?php echo esc_url( admin_url( 'upload.php?page=unattached-media-manager&tab=unused&view=unused' ) ); ?>" class="button">
+                                <?php esc_html_e( 'Clear', 'unattached-media-manager' ); ?>
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <?php if ( $has_filters ) : ?>
+                    <p style="margin: 10px 0 0; color: #50575e; font-size: 13px;">
+                        <?php
+                        printf(
+                            /* translators: %d: number of matching media files */
+                            esc_html( _n( 'Showing %d matching unused file (of %d total).', 'Showing %d matching unused files (of %d total).', intval( $media['total'] ), 'unattached-media-manager' ) ),
+                            intval( $media['total'] ),
+                            intval( $unused_count )
+                        );
+                        ?>
+                    </p>
+                <?php endif; ?>
+            </form>
+            <?php endif; ?>
 
             <?php if ( ! empty( $media['items'] ) ) : ?>
             <form id="mui-unused-form">
@@ -1399,6 +1502,8 @@ class UNMAM_Admin {
                 <?php
                 if ( 'trash' === $view ) {
                     esc_html_e( 'Trash is empty.', 'unattached-media-manager' );
+                } elseif ( $has_filters ) {
+                    esc_html_e( 'No unused media matches the current filters. Try a broader filename, different media type, or wider date range.', 'unattached-media-manager' );
                 } else {
                     esc_html_e( 'No unused media found. Run a full scan first to detect unused files.', 'unattached-media-manager' );
                 }

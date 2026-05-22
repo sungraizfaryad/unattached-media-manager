@@ -2,9 +2,9 @@
 Contributors: sungraizfaryad
 Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -306,6 +306,15 @@ Your parser should implement the `MUI_Parser_Interface`.
 
 == Changelog ==
 
+= 1.0.7 =
+* **Confirmed compatibility with WordPress 7.0**
+* **New:** Filter Unused Media by filename, mime type, and upload date range
+* **Improved:** Skip `_mfrh_history` and `_original_filename` meta keys (Media File Renamer plugin internals — not actual media references)
+* **Improved:** Confirmed Rank Math Schema video thumbnail meta (`rank_math_schema_VideoObject`) is matched by the generic post meta walker
+
+= 1.0.3 - 1.0.6 =
+* Maintenance releases: WordPress.org SVN asset structure fixes (banner, icon, screenshots), readme metadata updates. No functional code changes.
+
 = 1.0.0 =
 * Initial release
 * **Scanning Features:**
@@ -335,6 +344,9 @@ Your parser should implement the `MUI_Parser_Interface`.
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.0.7 =
+Confirmed compatibility with WordPress 7.0. Adds filters (filename / mime type / date range) to the Unused Media tab and improves meta key handling.
 
 = 1.0.0 =
 Initial release of Unattached Media Manager. Start organizing your media library today!

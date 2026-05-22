@@ -45,6 +45,8 @@ class UNMAM_Meta_Parser implements UNMAM_Parser_Interface {
         '/^_menu_item/',
         '/^_mui_/',
         '/^_elementor_/',
+        '/^_mfrh_history$/',     // Media File Renamer history (filenames only, not references)
+        '/^_original_filename$/', // Media File Renamer original filename
     );
 
     /**
