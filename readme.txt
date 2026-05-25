@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.7
+Stable tag: 1.0.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -306,6 +306,13 @@ Your parser should implement the `MUI_Parser_Interface`.
 
 == Changelog ==
 
+= 1.0.8 =
+* **New:** "Post Types to Scan" section on the Settings page. The scanner now auto-discovers every public post type registered by your theme or plugins (e.g. Projects, Portfolio, Events) and lets you tick the ones to include. Custom post types are scanned by default on new installs.
+* **New:** Existing 1.0.7 installs automatically receive the new setting populated with all currently registered public post types on the first read after upgrade — no rescan or re-activation required.
+* **New:** `unmam_scan_post_types` filter for developers who want to override the allow-list programmatically.
+* **Fix:** Save Settings button was a no-op in 1.0.7 — form field names did not match the save handler, so all toggle changes were silently discarded. Settings now persist correctly.
+* **Improved:** Tampered form submissions can no longer register arbitrary post-type slugs; the save handler intersects against currently registered public types.
+
 = 1.0.7 =
 * **Confirmed compatibility with WordPress 7.0**
 * **New:** Filter Unused Media by filename, mime type, and upload date range
@@ -344,6 +351,9 @@ Your parser should implement the `MUI_Parser_Interface`.
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.0.8 =
+Adds per-post-type scan control (auto-discovers all public custom post types) and fixes a silent bug in 1.0.7 where the Save Settings button did not actually persist changes. Recommended for everyone.
 
 = 1.0.7 =
 Confirmed compatibility with WordPress 7.0. Adds filters (filename / mime type / date range) to the Unused Media tab and improves meta key handling.

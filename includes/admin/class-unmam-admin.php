@@ -519,7 +519,7 @@ class UNMAM_Admin {
                         <td>
                             <fieldset>
                                 <label>
-                                    <input type="radio" name="mui_resource_mode" value="auto" <?php checked( ( $settings['resource_mode'] ?? 'auto' ), 'auto' ); ?>>
+                                    <input type="radio" name="unmam_resource_mode" value="auto" <?php checked( ( $settings['resource_mode'] ?? 'auto' ), 'auto' ); ?>>
                                     <strong><?php esc_html_e( 'Auto (Recommended)', 'unattached-media-manager' ); ?></strong>
                                     <p class="description" style="margin-left: 25px; margin-top: 2px;">
                                         <?php esc_html_e( 'Automatically adjusts batch size and delays based on your server\'s available memory and time limits. Best for most sites.', 'unattached-media-manager' ); ?>
@@ -527,7 +527,7 @@ class UNMAM_Admin {
                                 </label>
                                 <br>
                                 <label>
-                                    <input type="radio" name="mui_resource_mode" value="low" <?php checked( ( $settings['resource_mode'] ?? 'auto' ), 'low' ); ?>>
+                                    <input type="radio" name="unmam_resource_mode" value="low" <?php checked( ( $settings['resource_mode'] ?? 'auto' ), 'low' ); ?>>
                                     <strong><?php esc_html_e( 'Low Resources', 'unattached-media-manager' ); ?></strong>
                                     <p class="description" style="margin-left: 25px; margin-top: 2px;">
                                         <?php esc_html_e( 'Uses smaller batches (10-25 items) with longer delays. Best for shared hosting or sites experiencing timeouts.', 'unattached-media-manager' ); ?>
@@ -535,7 +535,7 @@ class UNMAM_Admin {
                                 </label>
                                 <br>
                                 <label>
-                                    <input type="radio" name="mui_resource_mode" value="high" <?php checked( ( $settings['resource_mode'] ?? 'auto' ), 'high' ); ?>>
+                                    <input type="radio" name="unmam_resource_mode" value="high" <?php checked( ( $settings['resource_mode'] ?? 'auto' ), 'high' ); ?>>
                                     <strong><?php esc_html_e( 'High Performance', 'unattached-media-manager' ); ?></strong>
                                     <p class="description" style="margin-left: 25px; margin-top: 2px;">
                                         <?php esc_html_e( 'Uses larger batches (50-200 items) with minimal delays. Only use on dedicated servers with ample resources.', 'unattached-media-manager' ); ?>
@@ -549,7 +549,7 @@ class UNMAM_Admin {
                         <td>
                             <fieldset>
                                 <label>
-                                    <input type="radio" name="mui_processing_mode" value="frontend" <?php checked( ( $settings['processing_mode'] ?? 'frontend' ), 'frontend' ); ?>>
+                                    <input type="radio" name="unmam_processing_mode" value="frontend" <?php checked( ( $settings['processing_mode'] ?? 'frontend' ), 'frontend' ); ?>>
                                     <strong><?php esc_html_e( 'Browser-Driven (Recommended)', 'unattached-media-manager' ); ?></strong>
                                     <p class="description" style="margin-left: 25px; margin-top: 2px;">
                                         <?php esc_html_e( 'Fast and reliable processing. Progress is shown in real-time. Requires keeping the browser tab open until operations complete.', 'unattached-media-manager' ); ?>
@@ -557,7 +557,7 @@ class UNMAM_Admin {
                                 </label>
                                 <br>
                                 <label>
-                                    <input type="radio" name="mui_processing_mode" value="background" <?php checked( ( $settings['processing_mode'] ?? 'frontend' ), 'background' ); ?>>
+                                    <input type="radio" name="unmam_processing_mode" value="background" <?php checked( ( $settings['processing_mode'] ?? 'frontend' ), 'background' ); ?>>
                                     <strong><?php esc_html_e( 'Background (WP-Cron)', 'unattached-media-manager' ); ?></strong>
                                     <p class="description" style="margin-left: 25px; margin-top: 2px;">
                                         <?php esc_html_e( 'Processing continues even after closing the browser. Relies on site visitor traffic to trigger WP-Cron. May be slower on low-traffic sites.', 'unattached-media-manager' ); ?>
@@ -611,7 +611,7 @@ class UNMAM_Admin {
                         <th scope="row"><?php esc_html_e( 'Auto-Attach Media', 'unattached-media-manager' ); ?></th>
                         <td>
                             <label>
-                                <input type="checkbox" name="mui_auto_attach" value="1" <?php checked( $settings['auto_attach'] ?? false ); ?>>
+                                <input type="checkbox" name="unmam_auto_attach" value="1" <?php checked( $settings['auto_attach'] ?? false ); ?>>
                                 <?php esc_html_e( 'Automatically attach media during scanning (not recommended)', 'unattached-media-manager' ); ?>
                             </label>
                             <p class="description">
@@ -629,27 +629,27 @@ class UNMAM_Admin {
                         <td>
                             <fieldset>
                                 <label>
-                                    <input type="checkbox" name="mui_scan_post_content" value="1" <?php checked( $settings['scan_post_content'] ?? true ); ?>>
+                                    <input type="checkbox" name="unmam_scan_post_content" value="1" <?php checked( $settings['scan_post_content'] ?? true ); ?>>
                                     <?php esc_html_e( 'Post Content', 'unattached-media-manager' ); ?>
                                 </label><br>
                                 <label>
-                                    <input type="checkbox" name="mui_scan_featured_images" value="1" <?php checked( $settings['scan_featured_images'] ?? true ); ?>>
+                                    <input type="checkbox" name="unmam_scan_featured_images" value="1" <?php checked( $settings['scan_featured_images'] ?? true ); ?>>
                                     <?php esc_html_e( 'Featured Images', 'unattached-media-manager' ); ?>
                                 </label><br>
                                 <label>
-                                    <input type="checkbox" name="mui_scan_gutenberg" value="1" <?php checked( $settings['scan_gutenberg'] ?? true ); ?>>
+                                    <input type="checkbox" name="unmam_scan_gutenberg" value="1" <?php checked( $settings['scan_gutenberg'] ?? true ); ?>>
                                     <?php esc_html_e( 'Gutenberg Blocks', 'unattached-media-manager' ); ?>
                                 </label><br>
                                 <label>
-                                    <input type="checkbox" name="mui_scan_acf_fields" value="1" <?php checked( $settings['scan_acf_fields'] ?? true ); ?>>
+                                    <input type="checkbox" name="unmam_scan_acf_fields" value="1" <?php checked( $settings['scan_acf_fields'] ?? true ); ?>>
                                     <?php esc_html_e( 'ACF Fields', 'unattached-media-manager' ); ?>
                                 </label><br>
                                 <label>
-                                    <input type="checkbox" name="mui_scan_widgets" value="1" <?php checked( $settings['scan_widgets'] ?? true ); ?>>
+                                    <input type="checkbox" name="unmam_scan_widgets" value="1" <?php checked( $settings['scan_widgets'] ?? true ); ?>>
                                     <?php esc_html_e( 'Widgets', 'unattached-media-manager' ); ?>
                                 </label><br>
                                 <label>
-                                    <input type="checkbox" name="mui_scan_options" value="1" <?php checked( $settings['scan_options'] ?? true ); ?>>
+                                    <input type="checkbox" name="unmam_scan_options" value="1" <?php checked( $settings['scan_options'] ?? true ); ?>>
                                     <?php esc_html_e( 'Theme Options & Settings', 'unattached-media-manager' ); ?>
                                 </label>
                             </fieldset>
@@ -657,8 +657,71 @@ class UNMAM_Admin {
                     </tr>
                 </table>
 
+                <h2 class="title"><?php esc_html_e( 'Post Types to Scan', 'unattached-media-manager' ); ?></h2>
+                <p class="description">
+                    <?php esc_html_e( 'Choose which post types the scanner walks for media references. Custom post types registered by your theme or plugins (e.g. Projects, Portfolio, Events) appear here. Untick a type to exclude its content from scans — useful for noisy or private post types.', 'unattached-media-manager' ); ?>
+                </p>
+
+                <table class="form-table">
+                    <?php
+                    $scan_post_types_setting = isset( $settings['scan_post_types'] ) && is_array( $settings['scan_post_types'] )
+                        ? $settings['scan_post_types']
+                        : unmam_default_scan_post_types();
+
+                    $public_types = get_post_types( array( 'public' => true ), 'objects' );
+                    // Exclude attachment (it IS media, not a referrer).
+                    unset( $public_types['attachment'] );
+
+                    $builtin_types = array();
+                    $custom_types  = array();
+                    foreach ( $public_types as $slug => $obj ) {
+                        if ( ! empty( $obj->_builtin ) ) {
+                            $builtin_types[ $slug ] = $obj;
+                        } else {
+                            $custom_types[ $slug ] = $obj;
+                        }
+                    }
+                    ?>
+
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Built-in Post Types', 'unattached-media-manager' ); ?></th>
+                        <td>
+                            <fieldset>
+                                <?php foreach ( $builtin_types as $slug => $obj ) : ?>
+                                    <label style="display:block; margin-bottom:4px;">
+                                        <input type="checkbox" name="unmam_scan_post_type[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( in_array( $slug, $scan_post_types_setting, true ) ); ?>>
+                                        <?php echo esc_html( $obj->labels->name ); ?>
+                                        <code style="opacity:.7; font-size:11px;"><?php echo esc_html( $slug ); ?></code>
+                                    </label>
+                                <?php endforeach; ?>
+                            </fieldset>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Custom Post Types', 'unattached-media-manager' ); ?></th>
+                        <td>
+                            <fieldset>
+                                <?php if ( empty( $custom_types ) ) : ?>
+                                    <p class="description">
+                                        <?php esc_html_e( 'No public custom post types are registered on this site. If your theme or a plugin defines a custom post type (e.g. Projects, Portfolio), it will appear here automatically.', 'unattached-media-manager' ); ?>
+                                    </p>
+                                <?php else : ?>
+                                    <?php foreach ( $custom_types as $slug => $obj ) : ?>
+                                        <label style="display:block; margin-bottom:4px;">
+                                            <input type="checkbox" name="unmam_scan_post_type[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( in_array( $slug, $scan_post_types_setting, true ) ); ?>>
+                                            <?php echo esc_html( $obj->labels->name ); ?>
+                                            <code style="opacity:.7; font-size:11px;"><?php echo esc_html( $slug ); ?></code>
+                                        </label>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </fieldset>
+                        </td>
+                    </tr>
+                </table>
+
                 <p class="submit">
-                    <input type="submit" name="mui_save_settings" class="button button-primary" value="<?php esc_attr_e( 'Save Settings', 'unattached-media-manager' ); ?>">
+                    <input type="submit" name="unmam_save_settings" class="button button-primary" value="<?php esc_attr_e( 'Save Settings', 'unattached-media-manager' ); ?>">
                 </p>
             </form>
         <?php
@@ -683,6 +746,17 @@ class UNMAM_Admin {
         }
 
         // phpcs:disable WordPress.Security.NonceVerification.Missing -- Nonce verified in render_admin_page()
+        $submitted_post_types = isset( $_POST['unmam_scan_post_type'] ) && is_array( $_POST['unmam_scan_post_type'] )
+            ? array_map( 'sanitize_key', wp_unslash( $_POST['unmam_scan_post_type'] ) )
+            : array();
+
+        // Only accept slugs that are currently registered as public post types
+        // (defends against tampered POSTs registering arbitrary strings).
+        $registered_public = get_post_types( array( 'public' => true ), 'names' );
+        $scan_post_types   = array_values( array_intersect( $submitted_post_types, $registered_public ) );
+        // Strip attachment as a safety net.
+        $scan_post_types   = array_values( array_diff( $scan_post_types, array( 'attachment' ) ) );
+
         $settings = array(
             'batch_size'           => isset( $_POST['unmam_batch_size'] ) ? absint( $_POST['unmam_batch_size'] ) : 50,
             'auto_attach'          => isset( $_POST['unmam_auto_attach'] ),
@@ -693,6 +767,7 @@ class UNMAM_Admin {
             'scan_widgets'         => isset( $_POST['unmam_scan_widgets'] ),
             'scan_options'         => isset( $_POST['unmam_scan_options'] ),
             'excluded_post_types'  => array( 'revision', 'nav_menu_item' ),
+            'scan_post_types'      => $scan_post_types,
             'resource_mode'        => $resource_mode,
             'processing_mode'      => $processing_mode,
         );

@@ -193,14 +193,22 @@ class UNMAM_Scanner {
         $progress = UNMAM_Database::get_scan_progress( 'posts' );
         $last_id  = $progress ? (int) $progress['last_processed_id'] : 0;
 
-        $settings       = Unattached_Media_Manager::get_setting();
-        $excluded_types = isset( $settings['excluded_post_types'] ) ? $settings['excluded_post_types'] : array( 'revision', 'nav_menu_item' );
+        $settings      = Unattached_Media_Manager::get_setting();
+        $allowed_types = $this->get_allowed_post_types( $settings );
 
-        // Build exclusion placeholders
-        $placeholders = implode( ', ', array_fill( 0, count( $excluded_types ), '%s' ) );
+        if ( empty( $allowed_types ) ) {
+            UNMAM_Database::update_scan_progress( 'posts', array(
+                'status'       => 'completed',
+                'completed_at' => current_time( 'mysql' ),
+            ) );
+            return array(
+                'processed' => 0,
+                'status'    => 'completed',
+                'message'   => __( 'No post types selected for scanning.', 'unattached-media-manager' ),
+            );
+        }
 
-        // Get post types to scan
-        $query_args = array_merge( array( $last_id, $batch_size ), $excluded_types );
+        $placeholders = implode( ', ', array_fill( 0, count( $allowed_types ), '%s' ) );
 
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Dynamic IN clause
         $posts = $wpdb->get_results(
@@ -209,10 +217,10 @@ class UNMAM_Scanner {
                 FROM {$wpdb->posts}
                 WHERE ID > %d
                 AND post_status NOT IN ('trash', 'auto-draft')
-                AND post_type NOT IN ({$placeholders})
+                AND post_type IN ({$placeholders})
                 ORDER BY ID ASC
                 LIMIT %d",
-                array_merge( array( $last_id ), $excluded_types, array( $batch_size ) )
+                array_merge( array( $last_id ), $allowed_types, array( $batch_size ) )
             )
         );
 
@@ -499,20 +507,58 @@ class UNMAM_Scanner {
     private function get_total_posts_count() {
         global $wpdb;
 
-        $settings       = Unattached_Media_Manager::get_setting();
-        $excluded_types = isset( $settings['excluded_post_types'] ) ? $settings['excluded_post_types'] : array( 'revision', 'nav_menu_item' );
+        $settings      = Unattached_Media_Manager::get_setting();
+        $allowed_types = $this->get_allowed_post_types( $settings );
 
-        $placeholders = implode( ', ', array_fill( 0, count( $excluded_types ), '%s' ) );
+        if ( empty( $allowed_types ) ) {
+            return 0;
+        }
+
+        $placeholders = implode( ', ', array_fill( 0, count( $allowed_types ), '%s' ) );
 
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Dynamic IN clause
         return (int) $wpdb->get_var(
             $wpdb->prepare(
                 "SELECT COUNT(*) FROM {$wpdb->posts}
                 WHERE post_status NOT IN ('trash', 'auto-draft')
-                AND post_type NOT IN ({$placeholders})",
-                $excluded_types
+                AND post_type IN ({$placeholders})",
+                $allowed_types
             )
         );
+    }
+
+    /**
+     * Resolve the post types the scanner should query.
+     *
+     * Prefers the allow-list ($settings['scan_post_types']) introduced in 1.0.8.
+     * Falls back to "all registered public types minus the legacy excluded
+     * list" so installs that never visited Settings keep behaving like 1.0.7.
+     * Always strips 'attachment', 'revision', and 'nav_menu_item' as a safety net.
+     *
+     * @param array $settings
+     * @return string[]
+     */
+    private function get_allowed_post_types( $settings ) {
+        if ( ! empty( $settings['scan_post_types'] ) && is_array( $settings['scan_post_types'] ) ) {
+            $types = array_map( 'sanitize_key', $settings['scan_post_types'] );
+        } else {
+            $all      = get_post_types( array( 'public' => true ), 'names' );
+            $excluded = isset( $settings['excluded_post_types'] ) && is_array( $settings['excluded_post_types'] )
+                ? $settings['excluded_post_types']
+                : array( 'revision', 'nav_menu_item' );
+            $types = array_diff( $all, $excluded );
+        }
+
+        // Hard guards: never scan attachments, revisions, or nav menu items.
+        $types = array_values( array_diff( $types, array( 'attachment', 'revision', 'nav_menu_item' ) ) );
+
+        /**
+         * Filter the post types the scanner queries.
+         *
+         * @since 1.0.8
+         * @param string[] $types Post type slugs.
+         */
+        return apply_filters( 'unmam_scan_post_types', $types );
     }
 
     /**

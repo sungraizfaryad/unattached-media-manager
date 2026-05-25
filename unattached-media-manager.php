@@ -4,7 +4,7 @@
  * Plugin Name: Unattached Media Manager
  * Plugin URI: https://wordpress.org/plugins/unattached-media-manager/
  * Description: Fix the WordPress Unattached media filter. Automatically attach used media files to their posts so you can safely clean up your library.
- * Version: 1.0.7
+ * Version: 1.0.8
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author: Sungraiz Faryad
@@ -22,8 +22,25 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Default allow-list of post types to scan.
+ *
+ * Returns every registered post type that is publicly queryable, minus
+ * attachments themselves. Built-in post types (post, page) are included so
+ * upgrades preserve historical behavior. Custom post types added later require
+ * an explicit opt-in via the Settings page.
+ *
+ * @return string[]
+ */
+function unmam_default_scan_post_types()
+{
+    $types = get_post_types(array('public' => true), 'names');
+    // Always exclude attachments (they ARE the media) and revisions/nav menu items (handled by excluded_post_types).
+    return array_values(array_diff($types, array('attachment', 'revision', 'nav_menu_item')));
+}
+
 // Plugin constants
-define('UNMAM_VERSION', '1.0.7');
+define('UNMAM_VERSION', '1.0.8');
 define('UNMAM_PLUGIN_FILE', __FILE__);
 define('UNMAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('UNMAM_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -57,7 +74,8 @@ function unmam_activate_plugin()
         'scan_gutenberg'       => true,
         'scan_widgets'         => true,
         'scan_options'         => true,
-        'excluded_post_types'  => array('revision', 'nav_menu_item'),
+        'excluded_post_types'  => array('revision', 'nav_menu_item'), // Legacy: kept for backward compat; superseded by scan_post_types
+        'scan_post_types'      => unmam_default_scan_post_types(),
         'resource_mode'        => 'auto', // auto, low, high
         'processing_mode'      => null,   // null = not set (show first-time popup), 'frontend' or 'background'
     ));
@@ -377,6 +395,13 @@ final class Unattached_Media_Manager
         $settings = get_option('unmam_settings');
         if (! $settings) {
             $settings = get_option('unmam_settings', array());
+        }
+
+        // Lazy migration: 1.0.8 introduced scan_post_types allow-list.
+        // Sites upgrading in place (no re-activation) need it populated on first read.
+        if (is_array($settings) && ! isset($settings['scan_post_types'])) {
+            $settings['scan_post_types'] = unmam_default_scan_post_types();
+            update_option('unmam_settings', $settings);
         }
 
         if (null === $key) {
