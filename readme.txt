@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.8
+Stable tag: 1.0.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -306,6 +306,12 @@ Your parser should implement the `MUI_Parser_Interface`.
 
 == Changelog ==
 
+= 1.0.9 =
+* **New:** "Custom Database Tables (Advanced)" setting. Some plugins store content (and the media URLs inside it) in their own database tables rather than in posts or options — newsletter plugins are a common example. You can now list those `table.column` locations and the scanner will read them, protecting any referenced media from being flagged as unused.
+* **Security:** Each table/column entry is strictly validated against the live database schema before any query runs — only existing tables (within this site's table prefix) and text columns are accepted, and all queries are read-only. Invalid entries are reported back rather than silently dropped.
+* **Note:** Media discovered in a custom table is protected from deletion but is not attached to a post (there is no post to attach it to) — it simply stops appearing in the Unused list.
+* **Internal:** The scan pipeline now derives its step list from a single source of truth, so the custom-tables step integrates cleanly and existing installs that don't use it behave exactly as before.
+
 = 1.0.8 =
 * **New:** "Post Types to Scan" section on the Settings page. The scanner now auto-discovers every public post type registered by your theme or plugins (e.g. Projects, Portfolio, Events) and lets you tick the ones to include. Custom post types are scanned by default on new installs.
 * **New:** Existing 1.0.7 installs automatically receive the new setting populated with all currently registered public post types on the first read after upgrade — no rescan or re-activation required.
@@ -351,6 +357,9 @@ Your parser should implement the `MUI_Parser_Interface`.
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.0.9 =
+Adds optional scanning of plugin-specific custom database tables (e.g. newsletter content) so media referenced there is protected from deletion. Strictly validated and read-only. Existing scans are unaffected unless you opt in.
 
 = 1.0.8 =
 Adds per-post-type scan control (auto-discovers all public custom post types) and fixes a silent bug in 1.0.7 where the Save Settings button did not actually persist changes. Recommended for everyone.

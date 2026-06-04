@@ -218,6 +218,20 @@ class UNMAM_Admin {
         if ( 'settings' === $current_tab && isset( $_POST['unmam_save_settings'] ) && check_admin_referer( 'unmam_settings_nonce' ) ) {
             $this->save_settings();
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'unattached-media-manager' ) . '</p></div>';
+
+            // Render any non-success notices queued during save (e.g. rejected
+            // custom-table entries). Each message is escaped once below.
+            foreach ( get_settings_errors( 'unmam_settings' ) as $error ) {
+                if ( 'success' === $error['type'] ) {
+                    continue; // Already shown above.
+                }
+                $css_type = in_array( $error['type'], array( 'error', 'warning', 'info' ), true ) ? $error['type'] : 'info';
+                printf(
+                    '<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>',
+                    esc_attr( $css_type ),
+                    esc_html( $error['message'] )
+                );
+            }
         }
 
         $statistics = UNMAM_Database::get_statistics();
@@ -720,6 +734,45 @@ class UNMAM_Admin {
                     </tr>
                 </table>
 
+                <h2 class="title"><?php esc_html_e( 'Custom Database Tables (Advanced)', 'unattached-media-manager' ); ?></h2>
+                <p class="description">
+                    <?php esc_html_e( 'Some plugins store content in their own database tables instead of posts or options (for example, newsletter plugins keep email HTML in custom tables). If media referenced there is showing up as "unused", list those locations below so the scanner can protect them.', 'unattached-media-manager' ); ?>
+                </p>
+
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">
+                            <label for="unmam_custom_tables"><?php esc_html_e( 'Table / column list', 'unattached-media-manager' ); ?></label>
+                        </th>
+                        <td>
+                            <?php
+                            // Render saved entries back as "table.column" lines.
+                            $custom_tables_setting = isset( $settings['scan_custom_tables'] ) && is_array( $settings['scan_custom_tables'] )
+                                ? $settings['scan_custom_tables']
+                                : array();
+                            $custom_tables_lines = array();
+                            foreach ( $custom_tables_setting as $entry ) {
+                                if ( isset( $entry['table'], $entry['column'] ) ) {
+                                    $custom_tables_lines[] = $entry['table'] . '.' . $entry['column'];
+                                }
+                            }
+                            global $wpdb;
+                            ?>
+                            <textarea name="unmam_custom_tables" id="unmam_custom_tables" rows="5" cols="50" class="large-text code"
+                                placeholder="<?php echo esc_attr( $wpdb->prefix . 'wpmlhistory.message' . "\n" . $wpdb->prefix . 'wpmlthemes.content' ); ?>"><?php echo esc_textarea( implode( "\n", $custom_tables_lines ) ); ?></textarea>
+                            <p class="description">
+                                <?php
+                                printf(
+                                    /* translators: %s: example table.column reference */
+                                    esc_html__( 'One %s per line, using the full table name including the table prefix. Only existing tables and text columns are accepted; anything else is ignored when you save. Media found here is protected from deletion but is not attached to a post (there is no post to attach it to).', 'unattached-media-manager' ),
+                                    '<code>table.column</code>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal
+                                );
+                                ?>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+
                 <p class="submit">
                     <input type="submit" name="unmam_save_settings" class="button button-primary" value="<?php esc_attr_e( 'Save Settings', 'unattached-media-manager' ); ?>">
                 </p>
@@ -757,6 +810,49 @@ class UNMAM_Admin {
         // Strip attachment as a safety net.
         $scan_post_types   = array_values( array_diff( $scan_post_types, array( 'attachment' ) ) );
 
+        // Custom database tables (advanced). Parse "table.column" lines, validate
+        // each against the live schema, and keep only the ones that pass. Invalid
+        // lines are reported back to the admin rather than silently dropped.
+        $custom_tables   = array();
+        $invalid_entries = array();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified in render_admin_page()
+        $raw_custom_tables = isset( $_POST['unmam_custom_tables'] ) ? (string) wp_unslash( $_POST['unmam_custom_tables'] ) : '';
+        if ( '' !== trim( $raw_custom_tables ) ) {
+            $lines = preg_split( '/\r\n|\r|\n/', $raw_custom_tables );
+            $seen  = array();
+            foreach ( $lines as $line ) {
+                $line = trim( $line );
+                if ( '' === $line ) {
+                    continue;
+                }
+                // Expect exactly "table.column". Split on the LAST dot so prefixes
+                // containing underscores (never dots) are handled predictably.
+                $dot = strrpos( $line, '.' );
+                if ( false === $dot ) {
+                    $invalid_entries[] = $line;
+                    continue;
+                }
+                $table  = substr( $line, 0, $dot );
+                $column = substr( $line, $dot + 1 );
+
+                $valid = UNMAM_Custom_Table_Parser::validate_table_column( $table, $column );
+                if ( ! $valid ) {
+                    $invalid_entries[] = $line;
+                    continue;
+                }
+
+                $key = $valid['table'] . '.' . $valid['column'];
+                if ( isset( $seen[ $key ] ) ) {
+                    continue; // De-duplicate.
+                }
+                $seen[ $key ]    = true;
+                $custom_tables[] = array(
+                    'table'  => $valid['table'],
+                    'column' => $valid['column'],
+                );
+            }
+        }
+
         $settings = array(
             'batch_size'           => isset( $_POST['unmam_batch_size'] ) ? absint( $_POST['unmam_batch_size'] ) : 50,
             'auto_attach'          => isset( $_POST['unmam_auto_attach'] ),
@@ -768,6 +864,7 @@ class UNMAM_Admin {
             'scan_options'         => isset( $_POST['unmam_scan_options'] ),
             'excluded_post_types'  => array( 'revision', 'nav_menu_item' ),
             'scan_post_types'      => $scan_post_types,
+            'scan_custom_tables'   => $custom_tables,
             'resource_mode'        => $resource_mode,
             'processing_mode'      => $processing_mode,
         );
@@ -776,6 +873,21 @@ class UNMAM_Admin {
         update_option( 'unmam_settings', $settings );
 
         add_settings_error( 'unmam_settings', 'settings_saved', __( 'Settings saved.', 'unattached-media-manager' ), 'success' );
+
+        // Surface any custom-table lines that failed validation so the admin
+        // can correct them, rather than silently discarding their input.
+        if ( ! empty( $invalid_entries ) ) {
+            add_settings_error(
+                'unmam_settings',
+                'custom_tables_invalid',
+                sprintf(
+                    /* translators: %s: comma-separated list of rejected table.column entries */
+                    __( 'These custom table entries were ignored (table or column not found, or not a text column): %s', 'unattached-media-manager' ),
+                    implode( ', ', $invalid_entries )
+                ),
+                'warning'
+            );
+        }
     }
 
     /**
@@ -795,6 +907,7 @@ class UNMAM_Admin {
             'option'         => __( 'Options', 'unattached-media-manager' ),
             'theme_mod'      => __( 'Theme Settings', 'unattached-media-manager' ),
             'widget'         => __( 'Widgets', 'unattached-media-manager' ),
+            'custom_table'   => __( 'Custom Database Table', 'unattached-media-manager' ),
         );
 
         return isset( $labels[ $context_type ] ) ? $labels[ $context_type ] : ucfirst( str_replace( '_', ' ', $context_type ) );

@@ -481,7 +481,10 @@ class UNMAM_Background_Processor {
      * @return string|null Next type or null if done.
      */
     private function get_next_scan_type( $current ) {
-        $types = array( 'posts', 'options', 'widgets' );
+        // Single source of truth for the scan-type chain. When the admin has not
+        // configured any custom tables this returns exactly the historical
+        // posts/options/widgets sequence, so behavior is unchanged.
+        $types = UNMAM_Scanner::get_active_scan_types();
         $index = array_search( $current, $types, true );
 
         if ( false === $index || $index >= count( $types ) - 1 ) {

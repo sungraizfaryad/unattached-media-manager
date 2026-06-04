@@ -330,6 +330,31 @@ class UNMAM_Database {
     }
 
     /**
+     * Delete all references of a given source type.
+     *
+     * Used by scan sources whose rows do not share a single source_id
+     * (e.g. custom tables, where source_id is each row's primary key), so the
+     * source_id-based delete cannot clear them in one call.
+     *
+     * @param string $source_type Source type.
+     * @return int Number of rows deleted.
+     */
+    public static function delete_references_by_source_type( $source_type ) {
+        global $wpdb;
+
+        $table = self::get_table_name( 'references' );
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safely generated
+        return $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$table} WHERE source_type = %s",
+                $source_type
+            )
+        );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+    }
+
+    /**
      * Delete references by attachment
      *
      * @param int $attachment_id Attachment ID.

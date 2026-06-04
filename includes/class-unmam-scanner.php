@@ -166,6 +166,10 @@ class UNMAM_Scanner {
                 $result = $this->scan_widgets();
                 break;
 
+            case 'custom_tables':
+                $result = $this->scan_custom_tables();
+                break;
+
             default:
                 /**
                  * Allow custom scan types
@@ -468,6 +472,131 @@ class UNMAM_Scanner {
     }
 
     /**
+     * Scan admin-configured custom database tables.
+     *
+     * Cursor-paginated across all configured table/column entries. Stores
+     * references with source_type 'custom_table' so the referenced media is
+     * protected from the "unused" list. These references are intentionally
+     * NOT eligible for auto-attach (a custom-table row is not a post).
+     *
+     * @return array
+     */
+    public function scan_custom_tables() {
+        $this->ensure_parsers_initialized();
+
+        $settings = Unattached_Media_Manager::get_setting();
+        $entries  = ( isset( $settings['scan_custom_tables'] ) && is_array( $settings['scan_custom_tables'] ) )
+            ? array_values( $settings['scan_custom_tables'] )
+            : array();
+
+        // Nothing configured: clear any stale rows and mark complete immediately.
+        if ( empty( $entries ) ) {
+            UNMAM_Database::delete_references_by_source_type( 'custom_table' );
+            UNMAM_Database::update_scan_progress( 'custom_tables', array(
+                'status'       => 'completed',
+                'completed_at' => current_time( 'mysql' ),
+            ) );
+            return array(
+                'processed' => 0,
+                'status'    => 'completed',
+                'message'   => __( 'No custom tables configured.', 'unattached-media-manager' ),
+            );
+        }
+
+        if ( ! isset( $this->parsers['custom_tables'] ) ) {
+            $this->parsers['custom_tables'] = new UNMAM_Custom_Table_Parser();
+        }
+        $parser = $this->parsers['custom_tables'];
+
+        // Progress cursor: pack (entry index, row offset) into last_processed_id
+        // as entry_index * MULTIPLIER + offset, so we can resume mid-table.
+        $multiplier = 1000000000; // 1e9 rows per table ceiling for cursor packing
+        $progress   = UNMAM_Database::get_scan_progress( 'custom_tables' );
+        $cursor     = $progress ? (int) $progress['last_processed_id'] : 0;
+        $entry_idx  = (int) floor( $cursor / $multiplier );
+        $row_offset = $cursor % $multiplier;
+
+        // First batch of a fresh run: clear previous custom-table references.
+        if ( 0 === $cursor ) {
+            UNMAM_Database::delete_references_by_source_type( 'custom_table' );
+        }
+
+        // Finished all entries.
+        if ( $entry_idx >= count( $entries ) ) {
+            UNMAM_Database::update_scan_progress( 'custom_tables', array(
+                'status'       => 'completed',
+                'completed_at' => current_time( 'mysql' ),
+            ) );
+            return array(
+                'processed' => 0,
+                'status'    => 'completed',
+                'message'   => __( 'Custom table scan completed.', 'unattached-media-manager' ),
+            );
+        }
+
+        $resource_monitor = UNMAM_Resource_Monitor::instance();
+        $batch_size       = max( 10, (int) $resource_monitor->get_recommended_batch_size() );
+
+        $entry  = $entries[ $entry_idx ];
+        $result = $parser->scan_table( $entry, $row_offset, $batch_size );
+
+        $references = isset( $result['references'] ) ? $result['references'] : array();
+        $rows_read  = isset( $result['rows'] ) ? (int) $result['rows'] : 0;
+
+        foreach ( $references as $ref ) {
+            UNMAM_Database::insert_reference( $ref );
+        }
+
+        // Advance cursor.
+        if ( $rows_read < $batch_size ) {
+            // This entry is exhausted; move to the next entry, offset 0.
+            $next_cursor = ( $entry_idx + 1 ) * $multiplier;
+        } else {
+            // Same entry, advance the row offset.
+            $next_cursor = $entry_idx * $multiplier + ( $row_offset + $rows_read );
+        }
+
+        $all_done = ( $entry_idx + 1 >= count( $entries ) ) && ( $rows_read < $batch_size );
+
+        UNMAM_Database::update_scan_progress( 'custom_tables', array(
+            'last_processed_id' => $next_cursor,
+            'status'            => $all_done ? 'completed' : 'running',
+            'completed_at'      => $all_done ? current_time( 'mysql' ) : null,
+        ) );
+
+        return array(
+            'processed' => count( $references ),
+            'status'    => $all_done ? 'completed' : 'running',
+            'message'   => sprintf(
+                /* translators: %d: number of references found in this batch */
+                __( 'Scanned custom table batch; found %d references.', 'unattached-media-manager' ),
+                count( $references )
+            ),
+        );
+    }
+
+    /**
+     * Get the ordered list of active scan types.
+     *
+     * Single source of truth for the scan pipeline. The historical
+     * posts/options/widgets sequence always runs. 'custom_tables' is appended
+     * only when the admin has configured at least one table/column entry, so
+     * installs that never opt in behave exactly as before.
+     *
+     * @return string[]
+     */
+    public static function get_active_scan_types() {
+        $types    = array( 'posts', 'options', 'widgets' );
+        $settings = Unattached_Media_Manager::get_setting();
+
+        if ( ! empty( $settings['scan_custom_tables'] ) && is_array( $settings['scan_custom_tables'] ) ) {
+            $types[] = 'custom_tables';
+        }
+
+        return $types;
+    }
+
+    /**
      * Full scan - scan everything
      *
      * @param bool $reset Whether to reset progress first.
@@ -571,49 +700,63 @@ class UNMAM_Scanner {
         $options_progress = UNMAM_Database::get_scan_progress( 'options' );
         $widgets_progress = UNMAM_Database::get_scan_progress( 'widgets' );
 
-        return array(
+        $status = array(
             'posts'   => $posts_progress,
             'options' => $options_progress,
             'widgets' => $widgets_progress,
-            'overall' => $this->calculate_overall_progress( $posts_progress, $options_progress, $widgets_progress ),
         );
+
+        // Only surface custom_tables progress when the step is active, so the
+        // payload and completion math are identical to prior versions otherwise.
+        $active_types = self::get_active_scan_types();
+        if ( in_array( 'custom_tables', $active_types, true ) ) {
+            $status['custom_tables'] = UNMAM_Database::get_scan_progress( 'custom_tables' );
+        }
+
+        $status['overall'] = $this->calculate_overall_progress( $status, $active_types );
+
+        return $status;
     }
 
     /**
-     * Calculate overall progress percentage
+     * Calculate overall progress percentage.
      *
-     * @param array|null $posts   Posts progress.
-     * @param array|null $options Options progress.
-     * @param array|null $widgets Widgets progress.
+     * Driven by the active scan-type list so the "all complete" check scales
+     * with however many steps are configured (3 by default, 4 with custom
+     * tables) instead of a hardcoded count.
+     *
+     * @param array    $progress     Map of scan_type => progress row (or null).
+     * @param string[] $active_types Ordered active scan types.
      * @return array
      */
-    private function calculate_overall_progress( $posts, $options, $widgets ) {
-        $total     = 0;
-        $processed = 0;
-        $completed = 0;
+    private function calculate_overall_progress( $progress, $active_types ) {
+        $total       = 0;
+        $processed   = 0;
+        $completed   = 0;
+        $step_count  = count( $active_types );
 
-        if ( $posts ) {
-            $total     += (int) $posts['total_items'];
-            $processed += (int) $posts['processed_items'];
-            if ( 'completed' === $posts['status'] ) {
-                $completed++;
+        // 'posts' is weighted by its real item count; the other steps count as
+        // a single unit each (they complete in one or a few batches).
+        foreach ( $active_types as $type ) {
+            $row = isset( $progress[ $type ] ) ? $progress[ $type ] : null;
+
+            if ( 'posts' === $type ) {
+                if ( $row ) {
+                    $total     += (int) $row['total_items'];
+                    $processed += (int) $row['processed_items'];
+                    if ( 'completed' === $row['status'] ) {
+                        $completed++;
+                    }
+                }
+                continue;
             }
-        }
 
-        // Options and widgets count as 1 item each
-        if ( $options ) {
-            $total++;
-            if ( 'completed' === $options['status'] ) {
-                $processed++;
-                $completed++;
-            }
-        }
-
-        if ( $widgets ) {
-            $total++;
-            if ( 'completed' === $widgets['status'] ) {
-                $processed++;
-                $completed++;
+            if ( $row ) {
+                $total++;
+                if ( 'completed' === $row['status'] ) {
+                    $processed++;
+                    $completed++;
+                }
             }
         }
 
@@ -623,7 +766,7 @@ class UNMAM_Scanner {
             'total'      => $total,
             'processed'  => $processed,
             'percentage' => $percentage,
-            'status'     => ( 3 === $completed ) ? 'completed' : 'running',
+            'status'     => ( $completed >= $step_count ) ? 'completed' : 'running',
         );
     }
 }

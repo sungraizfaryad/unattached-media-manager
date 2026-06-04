@@ -4,7 +4,7 @@
  * Plugin Name: Unattached Media Manager
  * Plugin URI: https://wordpress.org/plugins/unattached-media-manager/
  * Description: Fix the WordPress Unattached media filter. Automatically attach used media files to their posts so you can safely clean up your library.
- * Version: 1.0.8
+ * Version: 1.0.9
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author: Sungraiz Faryad
@@ -40,7 +40,7 @@ function unmam_default_scan_post_types()
 }
 
 // Plugin constants
-define('UNMAM_VERSION', '1.0.8');
+define('UNMAM_VERSION', '1.0.9');
 define('UNMAM_PLUGIN_FILE', __FILE__);
 define('UNMAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('UNMAM_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -76,6 +76,7 @@ function unmam_activate_plugin()
         'scan_options'         => true,
         'excluded_post_types'  => array('revision', 'nav_menu_item'), // Legacy: kept for backward compat; superseded by scan_post_types
         'scan_post_types'      => unmam_default_scan_post_types(),
+        'scan_custom_tables'   => array(), // List of array('table','column') the admin opted into. Empty = feature off.
         'resource_mode'        => 'auto', // auto, low, high
         'processing_mode'      => null,   // null = not set (show first-time popup), 'frontend' or 'background'
     ));
@@ -171,6 +172,7 @@ final class Unattached_Media_Manager
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-metabox-parser.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-woocommerce-parser.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-seo-parser.php';
+        require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-custom-table-parser.php';
 
         // Admin
         if (is_admin()) {
@@ -401,6 +403,14 @@ final class Unattached_Media_Manager
         // Sites upgrading in place (no re-activation) need it populated on first read.
         if (is_array($settings) && ! isset($settings['scan_post_types'])) {
             $settings['scan_post_types'] = unmam_default_scan_post_types();
+            update_option('unmam_settings', $settings);
+        }
+
+        // Lazy migration: 1.0.9 introduced scan_custom_tables (opt-in, default empty).
+        // Defaulting to an empty array keeps the scan pipeline identical to 1.0.8
+        // until the admin explicitly adds a table/column on the Settings page.
+        if (is_array($settings) && ! isset($settings['scan_custom_tables'])) {
+            $settings['scan_custom_tables'] = array();
             update_option('unmam_settings', $settings);
         }
 

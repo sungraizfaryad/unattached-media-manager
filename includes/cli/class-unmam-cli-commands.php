@@ -80,25 +80,27 @@ class UNMAM_CLI_Commands {
         // Create progress bar
         $progress = WP_CLI\Utils\make_progress_bar( 'Scanning posts', $result['total'] );
 
-        // Run batches until complete
-        $scan_type = 'posts';
+        // Run batches until complete. The type chain mirrors the admin/background
+        // pipeline via the shared source of truth, so 'custom_tables' is included
+        // only when the admin has configured at least one table/column.
+        $scan_types      = UNMAM_Scanner::get_active_scan_types();
+        $type_index      = 0;
+        $scan_type       = $scan_types[ $type_index ];
         $total_processed = 0;
 
         while ( true ) {
             $batch_result = $scanner->run_batch( $scan_type );
 
             if ( 'completed' === $batch_result['status'] ) {
-                // Move to next scan type
-                if ( 'posts' === $scan_type ) {
-                    $scan_type = 'options';
-                    WP_CLI::log( '' );
-                    WP_CLI::log( 'Scanning options...' );
-                } elseif ( 'options' === $scan_type ) {
-                    $scan_type = 'widgets';
-                    WP_CLI::log( 'Scanning widgets...' );
-                } else {
+                // Move to the next scan type, or finish.
+                $type_index++;
+                if ( $type_index >= count( $scan_types ) ) {
                     break;
                 }
+                $scan_type = $scan_types[ $type_index ];
+                WP_CLI::log( '' );
+                /* translators: %s: scan type name */
+                WP_CLI::log( sprintf( 'Scanning %s...', $scan_type ) );
                 continue;
             }
 
