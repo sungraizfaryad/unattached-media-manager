@@ -1,0 +1,11 @@
+# OS / editor junk
+.DS_Store
+Thumbs.db
+
+# Tooling
+.serena/
+.idea/
+.vscode/
+
+# Local-only files (never shipped)
+_unmam_*.php
