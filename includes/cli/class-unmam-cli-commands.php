@@ -16,19 +16,19 @@ if ( ! defined( 'ABSPATH' ) ) {
  * ## EXAMPLES
  *
  *     # Run a full scan
- *     $ wp mui scan
+ *     $ wp unmam scan
  *
  *     # Get statistics
- *     $ wp mui stats
+ *     $ wp unmam stats
  *
  *     # Check usage for a specific attachment
- *     $ wp mui usage 123
+ *     $ wp unmam usage 123
  *
  *     # List unused attachments
- *     $ wp mui unused --limit=50
+ *     $ wp unmam unused --limit=50
  *
  *     # Export report
- *     $ wp mui export --format=csv > report.csv
+ *     $ wp unmam export --format=csv > report.csv
  */
 class UNMAM_CLI_Commands {
 
@@ -46,13 +46,13 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Run full scan
-     *     wp mui scan
+     *     wp unmam scan
      *
      *     # Reset and run fresh scan
-     *     wp mui scan --reset
+     *     wp unmam scan --reset
      *
      *     # Run with larger batch size
-     *     wp mui scan --batch-size=100
+     *     wp unmam scan --batch-size=100
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -136,10 +136,10 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Display stats as table
-     *     wp mui stats
+     *     wp unmam stats
      *
      *     # Get stats as JSON
-     *     wp mui stats --format=json
+     *     wp unmam stats --format=json
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -204,10 +204,10 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Check usage for attachment 123
-     *     wp mui usage 123
+     *     wp unmam usage 123
      *
      *     # Get count only
-     *     wp mui usage 123 --format=count
+     *     wp unmam usage 123 --format=count
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -280,18 +280,21 @@ class UNMAM_CLI_Commands {
      * : Maximum number of results. Default: 50.
      *
      * [--format=<format>]
-     * : Output format. Options: table, json, ids, count. Default: table.
+     * : Output format. Options: table, csv, json, ids, count. Default: table.
      *
      * ## EXAMPLES
      *
      *     # List unused attachments
-     *     wp mui unused
+     *     wp unmam unused
      *
      *     # Get IDs only for scripting
-     *     wp mui unused --format=ids
+     *     wp unmam unused --format=ids
+     *
+     *     # Export the unused list with URLs to a CSV file
+     *     wp unmam unused --format=csv > unused-urls.csv
      *
      *     # Get count only
-     *     wp mui unused --format=count
+     *     wp unmam unused --format=count
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -319,6 +322,22 @@ class UNMAM_CLI_Commands {
             return;
         }
 
+        if ( 'csv' === $format ) {
+            $lines = array( '"ID","Title","File","URL"' );
+            foreach ( $unused as $item ) {
+                $url = isset( $item['url'] ) && $item['url'] ? $item['url'] : wp_get_attachment_url( $item['ID'] );
+                $lines[] = sprintf(
+                    '"%s","%s","%s","%s"',
+                    $item['ID'],
+                    str_replace( '"', '""', (string) $item['post_title'] ),
+                    str_replace( '"', '""', basename( $item['guid'] ) ),
+                    str_replace( '"', '""', (string) $url )
+                );
+            }
+            WP_CLI::log( implode( "\n", $lines ) );
+            return;
+        }
+
         // Table format
         if ( empty( $unused ) ) {
             WP_CLI::success( 'No unused attachments found!' );
@@ -334,10 +353,11 @@ class UNMAM_CLI_Commands {
                 'ID'    => $item['ID'],
                 'Title' => $item['post_title'] ?: '(No title)',
                 'File'  => basename( $item['guid'] ),
+                'URL'   => isset( $item['url'] ) ? $item['url'] : wp_get_attachment_url( $item['ID'] ),
             );
         }
 
-        WP_CLI\Utils\format_items( 'table', $table_data, array( 'ID', 'Title', 'File' ) );
+        WP_CLI\Utils\format_items( 'table', $table_data, array( 'ID', 'Title', 'File', 'URL' ) );
     }
 
     /**
@@ -354,7 +374,7 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Attach image 123 to post 456
-     *     wp mui attach 123 456
+     *     wp unmam attach 123 456
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -383,7 +403,7 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Detach attachment 123
-     *     wp mui detach 123
+     *     wp unmam detach 123
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -420,10 +440,10 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Preview changes
-     *     wp mui replace 123 456 --dry-run
+     *     wp unmam replace 123 456 --dry-run
      *
      *     # Replace references
-     *     wp mui replace 123 456 --yes
+     *     wp unmam replace 123 456 --yes
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -493,10 +513,10 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Export to CSV file
-     *     wp mui export --output=report.csv
+     *     wp unmam export --output=report.csv
      *
      *     # Export as JSON
-     *     wp mui export --format=json > report.json
+     *     wp unmam export --format=json > report.json
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -538,7 +558,7 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Index post 123
-     *     wp mui index 123
+     *     wp unmam index 123
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.
@@ -568,7 +588,7 @@ class UNMAM_CLI_Commands {
      * ## EXAMPLES
      *
      *     # Check scan status
-     *     wp mui status
+     *     wp unmam status
      *
      * @param array $args       Positional arguments.
      * @param array $assoc_args Associative arguments.

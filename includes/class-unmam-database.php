@@ -376,6 +376,32 @@ class UNMAM_Database {
     }
 
     /**
+     * SQL fragment that filters on the "marked safe" flag.
+     *
+     * Correlates on the posts alias `p`. Marked-safe files are the ones an admin
+     * has chosen to exclude from the unused reports.
+     *
+     * @param string $mode 'exclude' to drop safe files, 'only' to keep just them, '' for no filter.
+     * @return string
+     */
+    private static function safe_meta_clause( $mode ) {
+        global $wpdb;
+
+        if ( 'only' === $mode ) {
+            $op = 'EXISTS';
+        } elseif ( 'exclude' === $mode ) {
+            $op = 'NOT EXISTS';
+        } else {
+            return '';
+        }
+
+        return " AND {$op} (
+            SELECT 1 FROM {$wpdb->postmeta} pm
+            WHERE pm.post_id = p.ID AND pm.meta_key = '_mui_marked_safe' AND pm.meta_value != ''
+        )";
+    }
+
+    /**
      * Get unused attachments (no references in our table)
      *
      * @param array $args Query arguments.
@@ -389,9 +415,10 @@ class UNMAM_Database {
             'page'     => 1,
         );
 
-        $args   = wp_parse_args( $args, $defaults );
-        $table  = self::get_table_name( 'references' );
-        $offset = ( $args['page'] - 1 ) * $args['per_page'];
+        $args        = wp_parse_args( $args, $defaults );
+        $table       = self::get_table_name( 'references' );
+        $offset      = ( $args['page'] - 1 ) * $args['per_page'];
+        $safe_clause = self::safe_meta_clause( 'exclude' );
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are safely generated
         $results = $wpdb->get_results(
@@ -402,6 +429,7 @@ class UNMAM_Database {
                 WHERE p.post_type = 'attachment'
                 AND p.post_status != 'trash'
                 AND r.attachment_id IS NULL
+                {$safe_clause}
                 ORDER BY p.ID DESC
                 LIMIT %d OFFSET %d",
                 $args['per_page'],
@@ -410,6 +438,13 @@ class UNMAM_Database {
             ARRAY_A
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+        if ( $results ) {
+            foreach ( $results as &$row ) {
+                $row['url'] = wp_get_attachment_url( $row['ID'] );
+            }
+            unset( $row );
+        }
 
         return $results ? $results : array();
     }
@@ -432,6 +467,7 @@ class UNMAM_Database {
             'mime_type' => '',  // e.g. 'image', 'image/jpeg', 'video', 'application/pdf'
             'date_from' => '',  // YYYY-MM-DD
             'date_to'   => '',  // YYYY-MM-DD
+            'safe'      => 'exclude', // 'exclude' hides marked-safe files, 'only' shows just them.
         );
 
         $args   = wp_parse_args( $args, $defaults );
@@ -478,7 +514,7 @@ class UNMAM_Database {
 
         $base_where = "WHERE p.post_type = 'attachment'
             AND p.post_status != 'trash'
-            AND r.attachment_id IS NULL" . $where_extra;
+            AND r.attachment_id IS NULL" . $where_extra . self::safe_meta_clause( $args['safe'] );
 
         // Get total count
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are safely generated; user values are bound via $where_params
@@ -520,6 +556,9 @@ class UNMAM_Database {
 
             // Get filename
             $item->filename = basename( get_attached_file( $item->ID ) );
+
+            // Canonical public URL (CDN-aware), for the View link and exports
+            $item->file_url = wp_get_attachment_url( $item->ID );
         }
 
         return array(
@@ -531,12 +570,15 @@ class UNMAM_Database {
     /**
      * Get count of unused attachments
      *
+     * @param array $args Optional. 'safe' => 'exclude' (default) or 'only'.
      * @return int
      */
-    public static function get_unused_count() {
+    public static function get_unused_count( $args = array() ) {
         global $wpdb;
 
-        $table = self::get_table_name( 'references' );
+        $args        = wp_parse_args( $args, array( 'safe' => 'exclude' ) );
+        $table       = self::get_table_name( 'references' );
+        $safe_clause = self::safe_meta_clause( $args['safe'] );
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are safely generated
         return (int) $wpdb->get_var(
@@ -545,7 +587,8 @@ class UNMAM_Database {
             LEFT JOIN {$table} r ON p.ID = r.attachment_id
             WHERE p.post_type = 'attachment'
             AND p.post_status != 'trash'
-            AND r.attachment_id IS NULL"
+            AND r.attachment_id IS NULL
+            {$safe_clause}"
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     }
@@ -1279,7 +1322,9 @@ class UNMAM_Database {
 
         $table = self::get_table_name( 'references' );
 
-        // Get all attachment IDs that have NO references
+        $safe_clause = self::safe_meta_clause( 'exclude' );
+
+        // Get all attachment IDs that have NO references and aren't marked safe
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are safely generated
         $unused_ids = $wpdb->get_col(
             "SELECT p.ID
@@ -1288,6 +1333,7 @@ class UNMAM_Database {
             WHERE p.post_type = 'attachment'
             AND p.post_status = 'inherit'
             AND r.attachment_id IS NULL
+            {$safe_clause}
             ORDER BY p.ID ASC"
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared

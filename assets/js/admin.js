@@ -517,6 +517,30 @@
                 self.trashAllUnused();
             });
 
+            // Unused Media tab: Copy file URL to clipboard
+            $(document).on('click', '.mui-copy-url', function(e) {
+                e.preventDefault();
+                self.copyUrl($(this));
+            });
+
+            // Unused Media tab: Exclude a single file (hide from the list)
+            $(document).on('click', '.mui-exclude-single', function(e) {
+                e.preventDefault();
+                self.excludeSingle($(this));
+            });
+
+            // Excluded view: bring a file back into the unused list
+            $(document).on('click', '.mui-include-single', function(e) {
+                e.preventDefault();
+                self.includeSingle($(this));
+            });
+
+            // Unused Media tab: Export the unused list as a CSV of URLs
+            $(document).on('click', '#mui-export-unused-urls', function(e) {
+                e.preventDefault();
+                self.exportUnusedUrls();
+            });
+
             // History tab: Revert all active (uses job queue)
             $(document).on('click', '#mui-revert-all-active', function(e) {
                 e.preventDefault();
@@ -1388,6 +1412,189 @@
         },
 
         /**
+         * Export the unused list as a CSV of file URLs
+         */
+        exportUnusedUrls: function() {
+            var $button = $('#mui-export-unused-urls');
+            $button.prop('disabled', true);
+
+            $.ajax({
+                url: unmamAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'unmam_export_unused_urls',
+                    nonce: unmamAdmin.nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        var blob = new Blob([response.data.csv], { type: 'text/csv' });
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = response.data.filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }
+                    $button.prop('disabled', false);
+                },
+                error: function() {
+                    $button.prop('disabled', false);
+                }
+            });
+        },
+
+        /**
+         * Copy a file URL to the clipboard (with a fallback for plain-http sites)
+         */
+        copyUrl: function($button) {
+            var self = this;
+            if ($button.data('copying')) {
+                return; // ignore rapid repeat clicks during the async write
+            }
+            $button.data('copying', true);
+
+            var url = $button.data('url');
+            var original = $button.text();
+
+            var done = function(msg) {
+                $button.text(msg);
+                setTimeout(function() {
+                    $button.text(original).data('copying', false);
+                }, 1500);
+            };
+
+            var fallback = function() {
+                if (self.legacyCopy(url)) {
+                    done(unmamAdmin.strings.copied || 'Copied!');
+                } else {
+                    window.prompt(unmamAdmin.strings.copyFailed || 'Copy this URL:', url);
+                    $button.data('copying', false);
+                }
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(
+                    function() { done(unmamAdmin.strings.copied || 'Copied!'); },
+                    fallback
+                );
+            } else {
+                fallback();
+            }
+        },
+
+        /**
+         * Show an inline empty-state when the last visible unused/excluded row is removed
+         */
+        maybeShowEmptyUnused: function() {
+            if ($('#mui-unused-table tbody tr').length === 0) {
+                $('#mui-unused-table').replaceWith(
+                    '<p class="description" style="padding: 20px; text-align: center;">' +
+                    (unmamAdmin.strings.noItemsInView || 'No media in this view.') +
+                    '</p>'
+                );
+                $('#mui-export-unused-urls, #mui-trash-all-unused, #mui-trash-selected, #mui-restore-selected, #mui-delete-selected-permanently').prop('disabled', true);
+            }
+        },
+
+        /**
+         * Clipboard fallback using a temporary textarea + execCommand
+         */
+        legacyCopy: function(text) {
+            var $temp = $('<textarea>')
+                .css({ position: 'fixed', top: '-1000px', opacity: 0 })
+                .val(text)
+                .appendTo('body');
+            $temp[0].select();
+
+            var ok = false;
+            try {
+                ok = document.execCommand('copy');
+            } catch (e) {
+                ok = false;
+            }
+            $temp.remove();
+            return ok;
+        },
+
+        /**
+         * Exclude a single file from the unused list (marks it safe, row fades out)
+         */
+        excludeSingle: function($button) {
+            var self = this;
+            var attachmentId = $button.data('id');
+            var $row = $button.closest('tr');
+            var originalText = $button.text();
+
+            $button.prop('disabled', true).text(unmamAdmin.strings.excluding || 'Excluding...');
+
+            $.ajax({
+                url: unmamAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'unmam_exclude_single',
+                    nonce: unmamAdmin.nonce,
+                    attachment_id: attachmentId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $row.fadeOut(300, function() {
+                            $(this).remove();
+                            self.updateUnusedCounts(response.data);
+                            self.maybeShowEmptyUnused();
+                        });
+                    } else {
+                        self.showError(response.data || unmamAdmin.strings.excludeError);
+                        $button.prop('disabled', false).text(originalText);
+                    }
+                },
+                error: function() {
+                    self.showError(unmamAdmin.strings.excludeError);
+                    $button.prop('disabled', false).text(originalText);
+                }
+            });
+        },
+
+        /**
+         * Bring an excluded file back into the unused list (unmarks safe)
+         */
+        includeSingle: function($button) {
+            var self = this;
+            var attachmentId = $button.data('id');
+            var $row = $button.closest('tr');
+            var originalText = $button.text();
+
+            $button.prop('disabled', true).text(unmamAdmin.strings.including || 'Restoring...');
+
+            $.ajax({
+                url: unmamAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'unmam_include_single',
+                    nonce: unmamAdmin.nonce,
+                    attachment_id: attachmentId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $row.fadeOut(300, function() {
+                            $(this).remove();
+                            self.updateUnusedCounts(response.data);
+                            self.maybeShowEmptyUnused();
+                        });
+                    } else {
+                        self.showError(response.data || unmamAdmin.strings.includeError);
+                        $button.prop('disabled', false).text(originalText);
+                    }
+                },
+                error: function() {
+                    self.showError(unmamAdmin.strings.includeError);
+                    $button.prop('disabled', false).text(originalText);
+                }
+            });
+        },
+
+        /**
          * Attach all used but unattached media (uses job queue)
          */
         attachAllUsed: function() {
@@ -2098,10 +2305,43 @@
 
                 if (href.indexOf('view=trash') >= 0) {
                     $count.text('(' + data.trash_count + ')');
+                } else if (href.indexOf('view=excluded') >= 0) {
+                    if (typeof data.excluded_count !== 'undefined') {
+                        $count.text('(' + data.excluded_count + ')');
+                    }
                 } else if (href.indexOf('view=unused') >= 0 || href.indexOf('view') === -1) {
                     $count.text('(' + data.unused_count + ')');
                 }
             });
+
+            // Make the "Excluded" view link appear/disappear as files are excluded or included.
+            // It is only server-rendered when there is already something excluded, so add it on the fly.
+            if (typeof data.excluded_count !== 'undefined') {
+                var $sub = $('.mui-unused-filters .subsubsub');
+                var $excludedLink = $sub.find('a[href*="view=excluded"]');
+                var onExcludedView = /[?&]view=excluded/.test(window.location.search);
+
+                if (data.excluded_count > 0 && !$excludedLink.length && $sub.length) {
+                    var unusedHref = $sub.find('a[href*="view=unused"]').attr('href') || (window.location.pathname + window.location.search);
+                    var excludedHref = unusedHref.indexOf('view=unused') >= 0
+                        ? unusedHref.replace('view=unused', 'view=excluded')
+                        : unusedHref;
+                    // Build via DOM methods (no raw HTML interpolation of href/count)
+                    var $a = $('<a>')
+                        .attr('href', excludedHref)
+                        .text('Excluded ')
+                        .append($('<span class="count">').text('(' + parseInt(data.excluded_count, 10) + ')'));
+                    var $li = $('<li>').append($a).append(document.createTextNode(' | '));
+                    var $trashLi = $sub.find('a[href*="view=trash"]').closest('li');
+                    if ($trashLi.length) {
+                        $trashLi.before($li);
+                    } else {
+                        $sub.append($li);
+                    }
+                } else if (data.excluded_count === 0 && $excludedLink.length && !onExcludedView) {
+                    $excludedLink.closest('li').remove();
+                }
+            }
 
             // Update unused tab badge
             var $badge = $('a[href*="tab=unused"] .mui-tab-badge');

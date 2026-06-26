@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.9
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -306,6 +306,13 @@ Your parser should implement the `MUI_Parser_Interface`.
 
 == Changelog ==
 
+= 1.1.0 =
+* **New:** "Copy URL" button on each row of the Unused Media tab — grab a file's public URL in one click, with a fallback for sites served over plain HTTP.
+* **New:** The "View" action now opens the actual file (e.g. /wp-content/uploads/.../image.jpg) in a new tab instead of the attachment editor, so you can see the full-size file straight away. The title link still goes to the editor.
+* **New:** "Export URLs (CSV)" button on the Unused Media tab, plus `wp unmam unused --format=csv`, to export the list of unused file URLs — handy for comparing against a site crawl. The full media report (Export Report) now includes a URL column too.
+* **New:** Exclude files from the Unused list. Click "Exclude" on any row and it disappears from the report (and stops counting toward the unused total). Excluded files live under a new "Excluded" view where you can bring them back with "Include". This reuses the existing "Marked Safe" flag, so files marked safe in the Media Library are excluded here as well.
+* **Fix:** WP-CLI help examples referenced `wp mui`; the command is `wp unmam`. Updated throughout.
+
 = 1.0.9 =
 * **New:** "Custom Database Tables (Advanced)" setting. Some plugins store content (and the media URLs inside it) in their own database tables rather than in posts or options — newsletter plugins are a common example. You can now list those `table.column` locations and the scanner will read them, protecting any referenced media from being flagged as unused.
 * **Security:** Each table/column entry is strictly validated against the live database schema before any query runs — only existing tables (within this site's table prefix) and text columns are accepted, and all queries are read-only. Invalid entries are reported back rather than silently dropped.
@@ -357,6 +364,9 @@ Your parser should implement the `MUI_Parser_Interface`.
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.1.0 =
+Adds Copy URL and direct file View to the Unused Media tab, CSV export of unused file URLs (admin button and WP-CLI), and the ability to exclude known-good files from the unused report (with an Excluded view to undo). No rescan required.
 
 = 1.0.9 =
 Adds optional scanning of plugin-specific custom database tables (e.g. newsletter content) so media referenced there is protected from deletion. Strictly validated and read-only. Existing scans are unaffected unless you opt in.

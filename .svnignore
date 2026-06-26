@@ -1,0 +1,10 @@
+README.md
+Thumbs.db
+.github
+.git
+.gitattributes
+.gitignore
+.svnignore
+composer.lock
+CLAUDE.md
+progress.md

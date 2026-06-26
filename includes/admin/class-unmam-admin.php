@@ -52,6 +52,10 @@ class UNMAM_Admin {
         add_action( 'wp_ajax_unmam_trash_media', array( $this, 'ajax_trash_media' ) );
         add_action( 'wp_ajax_unmam_restore_media', array( $this, 'ajax_restore_media' ) );
         add_action( 'wp_ajax_unmam_delete_single', array( $this, 'ajax_delete_single' ) );
+        // Exclude/include a single file from the unused list (reuses the "marked safe" flag)
+        add_action( 'wp_ajax_unmam_exclude_single', array( $this, 'ajax_exclude_single' ) );
+        add_action( 'wp_ajax_unmam_include_single', array( $this, 'ajax_include_single' ) );
+        add_action( 'wp_ajax_unmam_export_unused_urls', array( $this, 'ajax_export_unused_urls' ) );
         // Bulk operations are now handled by the job queue - see UNMAM_Job_Queue class
 
         // Settings AJAX handler
@@ -156,6 +160,13 @@ class UNMAM_Admin {
                 'confirmRevert'   => __( 'This will detach this media from its parent post. Continue?', 'unattached-media-manager' ),
                 'confirmRevertBulk' => __( 'This will revert all selected changes. Continue?', 'unattached-media-manager' ),
                 'noSelection'     => __( 'Please select at least one item.', 'unattached-media-manager' ),
+                'copied'          => __( 'Copied!', 'unattached-media-manager' ),
+                'copyFailed'      => __( 'Press Ctrl/Cmd+C to copy', 'unattached-media-manager' ),
+                'excluding'       => __( 'Excluding...', 'unattached-media-manager' ),
+                'excludeError'    => __( 'Could not exclude this file.', 'unattached-media-manager' ),
+                'including'       => __( 'Restoring...', 'unattached-media-manager' ),
+                'includeError'    => __( 'Could not restore this file to the list.', 'unattached-media-manager' ),
+                'noItemsInView'   => __( 'No media in this view.', 'unattached-media-manager' ),
                 'trashing'        => __( 'Moving to trash...', 'unattached-media-manager' ),
                 'trashSuccess'    => __( 'Moved to trash successfully.', 'unattached-media-manager' ),
                 'trashError'      => __( 'Error moving to trash.', 'unattached-media-manager' ),
@@ -492,8 +503,9 @@ class UNMAM_Admin {
                                 </a>
                             </td>
                             <td>
-                                <a href="<?php echo esc_url( get_edit_post_link( $attachment['ID'] ) ); ?>" class="button button-small">
-                                    <?php esc_html_e( 'View', 'unattached-media-manager' ); ?>
+                                <?php $preview_url = ! empty( $attachment['url'] ) ? $attachment['url'] : get_edit_post_link( $attachment['ID'] ); ?>
+                                <a href="<?php echo esc_url( $preview_url ); ?>" class="button button-small" target="_blank" rel="noopener noreferrer">
+                                    <?php esc_html_e( 'View File', 'unattached-media-manager' ); ?>
                                 </a>
                             </td>
                         </tr>
@@ -977,6 +989,100 @@ class UNMAM_Admin {
     }
 
     /**
+     * Build the counts payload the Unused tab uses to refresh its tallies.
+     *
+     * @return array
+     */
+    private function unused_counts_payload() {
+        return array(
+            'unused_count'   => UNMAM_Database::get_unused_count(),
+            'excluded_count' => UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) ),
+            'trash_count'    => UNMAM_Database::get_trashed_count(),
+        );
+    }
+
+    /**
+     * AJAX: Exclude a single file from the unused list (marks it safe).
+     */
+    public function ajax_exclude_single() {
+        check_ajax_referer( 'unmam_admin_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Unauthorized', 'unattached-media-manager' ) );
+        }
+
+        $attachment_id = isset( $_POST['attachment_id'] ) ? intval( $_POST['attachment_id'] ) : 0;
+        if ( ! $attachment_id || 'attachment' !== get_post_type( $attachment_id ) ) {
+            wp_send_json_error( __( 'Invalid attachment ID.', 'unattached-media-manager' ) );
+        }
+
+        UNMAM_Attachment_Manager::instance()->mark_safe( $attachment_id );
+
+        wp_send_json_success( $this->unused_counts_payload() );
+    }
+
+    /**
+     * AJAX: Bring an excluded file back into the unused list (unmarks safe).
+     */
+    public function ajax_include_single() {
+        check_ajax_referer( 'unmam_admin_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Unauthorized', 'unattached-media-manager' ) );
+        }
+
+        $attachment_id = isset( $_POST['attachment_id'] ) ? intval( $_POST['attachment_id'] ) : 0;
+        if ( ! $attachment_id || 'attachment' !== get_post_type( $attachment_id ) ) {
+            wp_send_json_error( __( 'Invalid attachment ID.', 'unattached-media-manager' ) );
+        }
+
+        UNMAM_Attachment_Manager::instance()->unmark_safe( $attachment_id );
+
+        wp_send_json_success( $this->unused_counts_payload() );
+    }
+
+    /**
+     * AJAX: Export the unused media list as a CSV of file URLs.
+     */
+    public function ajax_export_unused_urls() {
+        check_ajax_referer( 'unmam_admin_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Unauthorized', 'unattached-media-manager' ) );
+        }
+
+        $ids = UNMAM_Database::get_all_unused_attachment_ids();
+
+        $rows = array();
+        $rows[] = array(
+            __( 'ID', 'unattached-media-manager' ),
+            __( 'Filename', 'unattached-media-manager' ),
+            __( 'URL', 'unattached-media-manager' ),
+        );
+
+        foreach ( $ids as $id ) {
+            $file = get_attached_file( $id );
+            $rows[] = array(
+                $id,
+                $file ? basename( $file ) : '',
+                wp_get_attachment_url( $id ),
+            );
+        }
+
+        $csv = '';
+        foreach ( $rows as $row ) {
+            $csv .= implode( ',', array_map( function( $cell ) {
+                return '"' . str_replace( '"', '""', (string) $cell ) . '"';
+            }, $row ) ) . "\n";
+        }
+
+        wp_send_json_success( array(
+            'csv'      => $csv,
+            'filename' => 'unused-media-urls-' . gmdate( 'Y-m-d' ) . '.csv',
+        ) );
+    }
+
+    /**
      * AJAX: Attach all used but unattached media
      */
     public function ajax_attach_all_used() {
@@ -1377,6 +1483,9 @@ class UNMAM_Admin {
         $per_page = 20;
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- View toggle, no action taken
         $view = isset( $_GET['view'] ) ? sanitize_text_field( wp_unslash( $_GET['view'] ) ) : 'unused';
+        if ( ! in_array( $view, array( 'unused', 'excluded', 'trash' ), true ) ) {
+            $view = 'unused';
+        }
 
         // phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only filter params, no action taken
         $filter_s         = isset( $_GET['mui_s'] ) ? sanitize_text_field( wp_unslash( $_GET['mui_s'] ) ) : '';
@@ -1395,8 +1504,9 @@ class UNMAM_Admin {
 
         $has_filters = ( '' !== $filter_s || '' !== $filter_mime || '' !== $filter_date_from || '' !== $filter_date_to );
 
-        $unused_count = UNMAM_Database::get_unused_count();
-        $trash_count = UNMAM_Database::get_trashed_count();
+        $unused_count   = UNMAM_Database::get_unused_count();
+        $excluded_count = UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) );
+        $trash_count    = UNMAM_Database::get_trashed_count();
 
         if ( 'trash' === $view ) {
             $media = UNMAM_Database::get_trashed_attachments( array(
@@ -1411,6 +1521,7 @@ class UNMAM_Admin {
                 'mime_type' => $filter_mime,
                 'date_from' => $filter_date_from,
                 'date_to'   => $filter_date_to,
+                'safe'      => ( 'excluded' === $view ) ? 'only' : 'exclude',
             ) );
         }
 
@@ -1438,11 +1549,23 @@ class UNMAM_Admin {
         <!-- Unused Media Panel -->
         <div class="mui-panel">
             <div class="mui-unused-header">
-                <h2><?php echo 'trash' === $view ? esc_html__( 'Trashed Media', 'unattached-media-manager' ) : esc_html__( 'Unused Media Files', 'unattached-media-manager' ); ?></h2>
+                <h2>
+                    <?php
+                    if ( 'trash' === $view ) {
+                        esc_html_e( 'Trashed Media', 'unattached-media-manager' );
+                    } elseif ( 'excluded' === $view ) {
+                        esc_html_e( 'Excluded Media Files', 'unattached-media-manager' );
+                    } else {
+                        esc_html_e( 'Unused Media Files', 'unattached-media-manager' );
+                    }
+                    ?>
+                </h2>
                 <p class="description">
                     <?php
                     if ( 'trash' === $view ) {
                         esc_html_e( 'These media files are in the trash. You can restore them or delete permanently.', 'unattached-media-manager' );
+                    } elseif ( 'excluded' === $view ) {
+                        esc_html_e( 'These files are hidden from the Unused list because you excluded them. Use Include to bring one back.', 'unattached-media-manager' );
                     } else {
                         esc_html_e( 'These media files have no detected references in your site content. Review carefully before deleting.', 'unattached-media-manager' );
                     }
@@ -1459,6 +1582,14 @@ class UNMAM_Admin {
                             <span class="count">(<?php echo esc_html( $unused_count ); ?>)</span>
                         </a> |
                     </li>
+                    <?php if ( $excluded_count > 0 || 'excluded' === $view ) : ?>
+                    <li>
+                        <a href="<?php echo esc_url( add_query_arg( array( 'view' => 'excluded', 'paged' => false ) ) ); ?>" <?php echo 'excluded' === $view ? 'class="current"' : ''; ?>>
+                            <?php esc_html_e( 'Excluded', 'unattached-media-manager' ); ?>
+                            <span class="count">(<?php echo esc_html( $excluded_count ); ?>)</span>
+                        </a> |
+                    </li>
+                    <?php endif; ?>
                     <li>
                         <a href="<?php echo esc_url( add_query_arg( array( 'view' => 'trash', 'paged' => false ) ) ); ?>" <?php echo 'trash' === $view ? 'class="current"' : ''; ?>>
                             <?php esc_html_e( 'Trash', 'unattached-media-manager' ); ?>
@@ -1492,6 +1623,9 @@ class UNMAM_Admin {
                         <?php endif; ?>
                         <button type="button" class="button button-link-delete" id="mui-trash-selected" disabled>
                             <?php esc_html_e( 'Trash Selected', 'unattached-media-manager' ); ?>
+                        </button>
+                        <button type="button" class="button" id="mui-export-unused-urls">
+                            <?php esc_html_e( 'Export URLs (CSV)', 'unattached-media-manager' ); ?>
                         </button>
                     <?php endif; ?>
                 </div>
@@ -1590,7 +1724,7 @@ class UNMAM_Admin {
                             <th style="width: 80px;"><?php esc_html_e( 'Thumbnail', 'unattached-media-manager' ); ?></th>
                             <th><?php esc_html_e( 'File', 'unattached-media-manager' ); ?></th>
                             <th><?php esc_html_e( 'Type', 'unattached-media-manager' ); ?></th>
-                            <?php if ( 'unused' === $view ) : ?>
+                            <?php if ( 'trash' !== $view ) : ?>
                             <th><?php esc_html_e( 'Size', 'unattached-media-manager' ); ?></th>
                             <?php endif; ?>
                             <th><?php esc_html_e( 'Date', 'unattached-media-manager' ); ?></th>
@@ -1622,7 +1756,7 @@ class UNMAM_Admin {
                             <td>
                                 <span class="description"><?php echo esc_html( $item->post_mime_type ); ?></span>
                             </td>
-                            <?php if ( 'unused' === $view ) : ?>
+                            <?php if ( 'trash' !== $view ) : ?>
                             <td>
                                 <span class="description"><?php echo esc_html( $item->file_size ); ?></span>
                             </td>
@@ -1642,9 +1776,23 @@ class UNMAM_Admin {
                                         <?php esc_html_e( 'Delete', 'unattached-media-manager' ); ?>
                                     </button>
                                 <?php else : ?>
-                                    <a href="<?php echo esc_url( get_edit_post_link( $item->ID ) ); ?>" class="button button-small">
-                                        <?php esc_html_e( 'View', 'unattached-media-manager' ); ?>
-                                    </a>
+                                    <?php if ( $item->file_url ) : ?>
+                                        <a href="<?php echo esc_url( $item->file_url ); ?>" class="button button-small" target="_blank" rel="noopener noreferrer">
+                                            <?php esc_html_e( 'View File', 'unattached-media-manager' ); ?>
+                                        </a>
+                                        <button type="button" class="button button-small mui-copy-url" data-url="<?php echo esc_url( $item->file_url ); ?>">
+                                            <?php esc_html_e( 'Copy URL', 'unattached-media-manager' ); ?>
+                                        </button>
+                                    <?php endif; ?>
+                                    <?php if ( 'excluded' === $view ) : ?>
+                                        <button type="button" class="button button-small mui-include-single" data-id="<?php echo esc_attr( $item->ID ); ?>">
+                                            <?php esc_html_e( 'Include', 'unattached-media-manager' ); ?>
+                                        </button>
+                                    <?php else : ?>
+                                        <button type="button" class="button button-small mui-exclude-single" data-id="<?php echo esc_attr( $item->ID ); ?>" title="<?php esc_attr_e( 'Hide this file from the Unused list', 'unattached-media-manager' ); ?>">
+                                            <?php esc_html_e( 'Exclude', 'unattached-media-manager' ); ?>
+                                        </button>
+                                    <?php endif; ?>
                                     <button type="button" class="button button-small button-link-delete mui-trash-single" data-id="<?php echo esc_attr( $item->ID ); ?>">
                                         <?php esc_html_e( 'Trash', 'unattached-media-manager' ); ?>
                                     </button>
@@ -1895,7 +2043,8 @@ class UNMAM_Admin {
 
         wp_send_json_success( array(
             'message'      => __( 'Moved to trash.', 'unattached-media-manager' ),
-            'unused_count' => UNMAM_Database::get_unused_count(),
+            'unused_count'   => UNMAM_Database::get_unused_count(),
+            'excluded_count' => UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) ),
             'trash_count'  => UNMAM_Database::get_trashed_count(),
         ) );
     }
@@ -1927,7 +2076,8 @@ class UNMAM_Admin {
                 $result['success'],
                 $result['errors']
             ),
-            'unused_count' => UNMAM_Database::get_unused_count(),
+            'unused_count'   => UNMAM_Database::get_unused_count(),
+            'excluded_count' => UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) ),
             'trash_count'  => UNMAM_Database::get_trashed_count(),
         ) );
     }
@@ -1956,7 +2106,8 @@ class UNMAM_Admin {
 
         wp_send_json_success( array(
             'message'      => __( 'Restored successfully.', 'unattached-media-manager' ),
-            'unused_count' => UNMAM_Database::get_unused_count(),
+            'unused_count'   => UNMAM_Database::get_unused_count(),
+            'excluded_count' => UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) ),
             'trash_count'  => UNMAM_Database::get_trashed_count(),
         ) );
     }
@@ -1988,7 +2139,8 @@ class UNMAM_Admin {
                 $result['success'],
                 $result['errors']
             ),
-            'unused_count' => UNMAM_Database::get_unused_count(),
+            'unused_count'   => UNMAM_Database::get_unused_count(),
+            'excluded_count' => UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) ),
             'trash_count'  => UNMAM_Database::get_trashed_count(),
         ) );
     }
@@ -2020,7 +2172,8 @@ class UNMAM_Admin {
                 $result['success'],
                 $result['errors']
             ),
-            'unused_count' => UNMAM_Database::get_unused_count(),
+            'unused_count'   => UNMAM_Database::get_unused_count(),
+            'excluded_count' => UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) ),
             'trash_count'  => UNMAM_Database::get_trashed_count(),
         ) );
     }
@@ -2049,7 +2202,8 @@ class UNMAM_Admin {
 
         wp_send_json_success( array(
             'message'      => __( 'Deleted permanently.', 'unattached-media-manager' ),
-            'unused_count' => UNMAM_Database::get_unused_count(),
+            'unused_count'   => UNMAM_Database::get_unused_count(),
+            'excluded_count' => UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) ),
             'trash_count'  => UNMAM_Database::get_trashed_count(),
         ) );
     }
