@@ -117,7 +117,7 @@ Unattached Media Manager is built with extensibility in mind:
 
 * **Hooks & Filters** - Extend scanning with custom parsers
 * **REST API** - Query media usage programmatically
-* **WP-CLI Commands** - Run scans from the command line (`wp aioms scan`)
+* **WP-CLI Commands** - Run scans from the command line (`wp unmam scan`)
 * **Custom Post Types** - Automatically scans all public post types
 
 == Installation ==
@@ -329,16 +329,16 @@ Yes! Set the Resource Mode to "Low Resources" in Settings. This uses smaller bat
 
 = How do I extend the scanner? =
 
-Use the `aioms_parsers` filter to add custom parsers:
+Use the `unmam_parsers` filter to add custom parsers:
 
 `
-add_filter( 'aioms_parsers', function( $parsers ) {
+add_filter( 'unmam_parsers', function( $parsers ) {
     $parsers['my_custom'] = new My_Custom_Parser();
     return $parsers;
 } );
 `
 
-Your parser should implement the `MUI_Parser_Interface`.
+Your parser should implement the `UNMAM_Parser_Interface`.
 
 == Screenshots ==
 
