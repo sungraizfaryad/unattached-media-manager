@@ -2,9 +2,9 @@
 Contributors: sungraizfaryad
 Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -197,7 +197,31 @@ The **Change History** tab shows:
    - Referenced in custom code or third-party plugins not yet supported
    - Used in email templates stored outside WordPress
 3. **Use Trash first** - Move to trash instead of deleting permanently
-4. **Wait before emptying trash** - Keep trashed items for a few days to catch any issues
+4. **Know what the trash does** - Trashing changes an item's status. It does not remove the file or break anything on your site. See below.
+
+= What Trashing Does And Does Not Do =
+
+Moving media to the trash only changes its status in the database. The file stays on your
+server, and any image already placed in your content keeps displaying exactly as before.
+
+This matters because it is tempting to trash a batch of "unused" files and then browse the
+site looking for broken images to find the mistakes. That does not work. Nothing will look
+broken, whether the files were genuinely unused or not. Images only break after a permanent
+delete, which is the point where it is too late to learn from them.
+
+Two things that do reliably tell you whether a file is in use:
+
+* **Your server access logs.** Search them for requests under /wp-content/uploads/ over the
+  last month or two. Files that no browser has ever requested are genuinely unused. This
+  also catches images that other websites link to, which no plugin can detect.
+* **A staging copy.** Clone the site, permanently delete there, then crawl it with a broken
+  link checker. You get a real list of what breaks with no risk to the live site.
+
+Also worth knowing: WordPress empties the trash automatically. Items sitting in the trash
+longer than the EMPTY_TRASH_DAYS setting, 30 days by default, are deleted permanently on a
+schedule, and for media that removes the files from your server. You do not have to click
+Empty Trash for this to happen. If you are keeping things in the trash deliberately while
+you check them, raise EMPTY_TRASH_DAYS in wp-config.php first.
 
 = About "Potentially Unused" Media =
 
@@ -218,7 +242,9 @@ Files marked as "Potentially Unused" means:
 2. **Review** - Look at the Unused Media tab
 3. **Research** - For each file, consider where it might be used
 4. **Trash** - Move questionable items to trash (not permanent delete)
-5. **Monitor** - Check your site for a few days for missing images
+5. **Verify** - Check your server access logs for requests to those files, or test the
+   deletion on a staging copy. Do not wait for broken images to appear, because trashing
+   never produces any
 6. **Delete** - Only permanently delete after confirming no issues
 
 = Server Resources =
@@ -272,6 +298,27 @@ If images are stored in the database (post meta, options, theme mods), they will
 
 We strongly recommend using Trash first and waiting a few days before permanently deleting.
 
+= I trashed unused media but the images are still showing. Is it broken? =
+
+No, that is how WordPress works. Trashing media only changes its status. The file stays on
+your server and images already placed in your content keep displaying, so you will not see
+broken images either way. Use your server access logs or a staging copy to confirm what is
+really in use, and see "What Trashing Does And Does Not Do" above.
+
+= Will my trashed media stay in the trash until I empty it? =
+
+No. WordPress deletes trashed items automatically once they are older than the
+EMPTY_TRASH_DAYS setting, which is 30 days by default, and for media that deletes the files
+from your server too. If you want to keep things in the trash for longer while you check
+them, raise that value in wp-config.php.
+
+= The Trash buttons are missing. Why? =
+
+Your site has EMPTY_TRASH_DAYS set to 0 in wp-config.php, which disables the WordPress
+trash entirely. With that setting a "move to trash" would delete files immediately and
+permanently, so the plugin hides those buttons rather than destroy media behind a button
+labelled Trash. Set EMPTY_TRASH_DAYS to a positive number to get them back.
+
 = Does this work with Multisite? =
 
 Currently, Unattached Media Manager works on individual sites. Network-wide scanning for Multisite is planned for a future release.
@@ -305,6 +352,12 @@ Your parser should implement the `MUI_Parser_Interface`.
 8. **Attachment Settings** - Choose which content areas (Post Content, Featured Images, ACF Fields, Widgets, Theme Options) are actively scanned.
 
 == Changelog ==
+
+= 1.1.1 =
+* **Fix (data loss):** On sites with `EMPTY_TRASH_DAYS` set to 0 the WordPress trash is disabled, and "Move to Trash" silently deleted the file from the server while reporting that it had been trashed. The plugin now refuses to trash on those sites, hides the Trash buttons, and explains why.
+* **New:** The Trash view now states plainly that trashed files remain on the server and that images already placed in your content keep displaying, so a trashed file that is still in use will not show up as a broken image.
+* **New:** The Trash view warns that WordPress empties the trash automatically after `EMPTY_TRASH_DAYS` (30 by default), which permanently deletes the files, without anyone clicking Empty Trash.
+* **Docs:** Corrected the deletion guidance in the readme. Previous versions suggested watching the site for missing images after trashing, which can never happen and gave a false sense of safety. Replaced with methods that actually work (server access logs, staging copy).
 
 = 1.1.0 =
 * **New:** "Copy URL" button on each row of the Unused Media tab — grab a file's public URL in one click, with a fallback for sites served over plain HTTP.
@@ -364,6 +417,9 @@ Your parser should implement the `MUI_Parser_Interface`.
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.1.1 =
+Important fix for sites with EMPTY_TRASH_DAYS set to 0, where "Move to Trash" permanently deleted files while reporting success. Also corrects misleading guidance: trashing media never produces broken images, so it cannot be used to check whether a file was still in use. Recommended for all users.
 
 = 1.1.0 =
 Adds Copy URL and direct file View to the Unused Media tab, CSV export of unused file URLs (admin button and WP-CLI), and the ability to exclude known-good files from the unused report (with an Excluded view to undo). No rescan required.

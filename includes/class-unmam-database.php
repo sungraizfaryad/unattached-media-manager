@@ -664,6 +664,15 @@ class UNMAM_Database {
     }
 
     /**
+     * Whether WordPress trash is usable on this site.
+     *
+     * @return bool
+     */
+    public static function is_trash_available() {
+        return (bool) EMPTY_TRASH_DAYS;
+    }
+
+    /**
      * Trash a single attachment
      *
      * @param int $attachment_id Attachment ID.
@@ -674,6 +683,16 @@ class UNMAM_Database {
 
         if ( ! $attachment || 'attachment' !== $attachment->post_type ) {
             return new WP_Error( 'invalid_attachment', __( 'Invalid attachment ID.', 'unattached-media-manager' ) );
+        }
+
+        // With EMPTY_TRASH_DAYS at 0 wp_trash_post() falls straight through to a force
+        // delete, which takes the file off disk. Refuse instead of destroying the upload
+        // while reporting "moved to trash".
+        if ( ! self::is_trash_available() ) {
+            return new WP_Error(
+                'trash_disabled',
+                __( 'Trash is disabled on this site (EMPTY_TRASH_DAYS is set to 0), so moving media to trash would permanently delete the file. Set EMPTY_TRASH_DAYS to a positive number in wp-config.php, or use Delete Permanently if that is what you intend.', 'unattached-media-manager' )
+            );
         }
 
         if ( 'trash' === $attachment->post_status ) {

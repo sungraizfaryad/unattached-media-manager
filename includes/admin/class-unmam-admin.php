@@ -1504,9 +1504,10 @@ class UNMAM_Admin {
 
         $has_filters = ( '' !== $filter_s || '' !== $filter_mime || '' !== $filter_date_from || '' !== $filter_date_to );
 
-        $unused_count   = UNMAM_Database::get_unused_count();
-        $excluded_count = UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) );
-        $trash_count    = UNMAM_Database::get_trashed_count();
+        $unused_count    = UNMAM_Database::get_unused_count();
+        $excluded_count  = UNMAM_Database::get_unused_count( array( 'safe' => 'only' ) );
+        $trash_count     = UNMAM_Database::get_trashed_count();
+        $trash_available = UNMAM_Database::is_trash_available();
 
         if ( 'trash' === $view ) {
             $media = UNMAM_Database::get_trashed_attachments( array(
@@ -1543,8 +1544,31 @@ class UNMAM_Admin {
         <!-- Warning Notice -->
         <div class="mui-notice mui-notice-warning" style="margin-bottom: 20px;">
             <strong><?php esc_html_e( 'Warning:', 'unattached-media-manager' ); ?></strong>
-            <?php esc_html_e( 'Before deleting media, ensure a scan has been completed. Media files may be used in ways not yet detected (external sites, custom code, etc.). When in doubt, move to trash first - you can restore later if needed.', 'unattached-media-manager' ); ?>
+            <?php esc_html_e( 'Before deleting media, ensure a scan has been completed. Media files may be used in ways not yet detected (theme files, CSS backgrounds, external sites, custom code). Trashing is reversible, so use it first and confirm before deleting permanently.', 'unattached-media-manager' ); ?>
         </div>
+
+        <?php if ( ! $trash_available ) : ?>
+        <div class="mui-notice mui-notice-error" style="margin-bottom: 20px;">
+            <strong><?php esc_html_e( 'Trash is disabled on this site.', 'unattached-media-manager' ); ?></strong>
+            <?php esc_html_e( 'EMPTY_TRASH_DAYS is set to 0 in wp-config.php, so WordPress deletes items immediately instead of trashing them. Trash actions are hidden here to prevent media being destroyed by a button labelled "Trash". Set EMPTY_TRASH_DAYS to a positive number to enable them.', 'unattached-media-manager' ); ?>
+        </div>
+        <?php endif; ?>
+
+        <?php if ( 'trash' === $view && $trash_available ) : ?>
+        <div class="mui-notice" style="margin-bottom: 20px;">
+            <strong><?php esc_html_e( 'How trashed media behaves:', 'unattached-media-manager' ); ?></strong>
+            <?php esc_html_e( 'Files stay on the server, and images already placed in your content keep displaying. Trashing a file that is still in use will not produce a broken image, so do not rely on visible breakage to tell you whether something was safe to remove.', 'unattached-media-manager' ); ?>
+            <strong>
+                <?php
+                printf(
+                    /* translators: %d: number of days set by EMPTY_TRASH_DAYS */
+                    esc_html__( 'WordPress permanently deletes trashed items, files included, after %d days, without you clicking Empty Trash.', 'unattached-media-manager' ),
+                    (int) EMPTY_TRASH_DAYS
+                );
+                ?>
+            </strong>
+        </div>
+        <?php endif; ?>
 
         <!-- Unused Media Panel -->
         <div class="mui-panel">
@@ -1563,7 +1587,7 @@ class UNMAM_Admin {
                 <p class="description">
                     <?php
                     if ( 'trash' === $view ) {
-                        esc_html_e( 'These media files are in the trash. You can restore them or delete permanently.', 'unattached-media-manager' );
+                        esc_html_e( 'These media files are in the trash. The files themselves are still on the server until you delete them permanently.', 'unattached-media-manager' );
                     } elseif ( 'excluded' === $view ) {
                         esc_html_e( 'These files are hidden from the Unused list because you excluded them. Use Include to bring one back.', 'unattached-media-manager' );
                     } else {
@@ -1610,7 +1634,7 @@ class UNMAM_Admin {
                             <?php esc_html_e( 'Delete Permanently', 'unattached-media-manager' ); ?>
                         </button>
                     <?php elseif ( 'unused' === $view && $unused_count > 0 ) : ?>
-                        <?php if ( ! $has_filters ) : ?>
+                        <?php if ( ! $has_filters && $trash_available ) : ?>
                             <button type="button" class="button button-link-delete" id="mui-trash-all-unused">
                                 <?php
                                 printf(
@@ -1621,9 +1645,11 @@ class UNMAM_Admin {
                                 ?>
                             </button>
                         <?php endif; ?>
+                        <?php if ( $trash_available ) : ?>
                         <button type="button" class="button button-link-delete" id="mui-trash-selected" disabled>
                             <?php esc_html_e( 'Trash Selected', 'unattached-media-manager' ); ?>
                         </button>
+                        <?php endif; ?>
                         <button type="button" class="button" id="mui-export-unused-urls">
                             <?php esc_html_e( 'Export URLs (CSV)', 'unattached-media-manager' ); ?>
                         </button>
@@ -1793,9 +1819,11 @@ class UNMAM_Admin {
                                             <?php esc_html_e( 'Exclude', 'unattached-media-manager' ); ?>
                                         </button>
                                     <?php endif; ?>
+                                    <?php if ( $trash_available ) : ?>
                                     <button type="button" class="button button-small button-link-delete mui-trash-single" data-id="<?php echo esc_attr( $item->ID ); ?>">
                                         <?php esc_html_e( 'Trash', 'unattached-media-manager' ); ?>
                                     </button>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </td>
                         </tr>

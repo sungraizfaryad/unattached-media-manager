@@ -438,10 +438,14 @@ class UNMAM_Attachment_Manager {
     }
 
     /**
-     * Safely delete attachment (moves to trash first if not already)
+     * Delete an attachment after checking it is safe to remove.
+     *
+     * Note that WordPress only routes attachments through the trash when MEDIA_TRASH is
+     * defined, which it is not on most sites, so this usually deletes the file outright
+     * regardless of $force_delete.
      *
      * @param int  $attachment_id Attachment ID.
-     * @param bool $force_delete  Skip trash.
+     * @param bool $force_delete  Skip trash where MEDIA_TRASH is enabled.
      * @return bool|WP_Error
      */
     public function safe_delete( $attachment_id, $force_delete = false ) {

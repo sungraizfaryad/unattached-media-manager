@@ -1,33 +1,39 @@
-_Last updated: 2026-06-27._
+_Last updated: 2026-09-03._
 _Quick status only. Full detail in CLAUDE.md and cloud memory (`project_unmam_*`)._
 
 ## Done
-- 1.1.0 (BUILT + browser-tested on FLP, NOT yet shipped to WP.org/GitHub): Unused-tab UX from @galbaras forum request — (1) "View File" now opens the real upload URL in a new tab (was a duplicate edit-screen link); (2) per-row "Copy URL" button (clipboard + http fallback); (3) "Export URLs (CSV)" admin button + `wp unmam unused --format=csv` + URL column added to the full Export Report; (4) per-row "Exclude" hides a file from the Unused list (reuses `_mui_marked_safe`), with an "Excluded" sub-view + "Include" to undo; excluded files vanish and stop counting. Fixed CLI docblocks `wp mui`→`wp unmam`.
-- 1.0.9 (live on WP.org + GitHub): scan opt-in custom database tables (`table.column`), schema-validated, read-only; protects referenced media without auto-attaching.
-- 1.0.8: per-post-type scan controls (auto-discovers public CPTs); fixed silent settings-save no-op (mui_/unmam_ field mismatch); lazy migration for scan_post_types.
-- 1.0.7: Unused-media filters (filename / mime / date range); WP 7.0 compat; skip `_mfrh_history` + `_original_filename` meta keys; fixed stale `UNMAM_VERSION` constant.
-- 1.0.3 to 1.0.6: WP.org SVN asset structure + readme metadata only, no code change.
-- 1.0.0: initial release (scanner, parsers, attach/unused/history, REST, CLI).
+- 1.1.1 (BUILT + browser-tested on FLP, NOT yet committed/shipped): safety release from three forum threads.
+  (1) Data-loss fix: on sites with `EMPTY_TRASH_DAYS = 0`, `wp_trash_post()` falls through to a force
+  delete, so "Move to Trash" deleted the file while returning true. `UNMAM_Database::trash_attachment()`
+  now refuses via new `is_trash_available()`; all Trash buttons hidden; red explainer notice.
+  (2) Trash view notice: files stay on disk, images keep rendering, and core auto-purges after
+  EMPTY_TRASH_DAYS days. (3) readme: removed the "watch for missing images" advice (impossible by
+  design), replaced with access logs / staging-copy verification. Corrected `safe_delete()` docblock.
+- 1.1.0 (LIVE on WP.org + GitHub, tag 1.1.0): Unused-tab file URLs, Copy URL, CSV export, per-file Exclude.
+- 1.0.9: opt-in custom database table scanning. 1.0.8: per-post-type scan controls + settings-save fix.
 
 ## Decisions
-- 1.1.0 exclude = the existing "Marked Safe" flag (`_mui_marked_safe`); marking safe in the Media Library now also excludes from the Unused list. `safe_meta_clause()` in class-unmam-database.php applies it (NOT EXISTS) to all 4 unused queries.
-- Single trash/restore/delete AJAX handlers now also return `excluded_count` so the Excluded nav count stays live.
-- Mixed `aioms_*` / `mui_*` / `unmam_*` identifiers kept intentionally for back-compat. Do not rename to match current plugin name.
-- Custom-table refs use `source_type 'custom_table'` and are never auto-attached, only unused-protected.
-- Scan step list comes from `UNMAM_Scanner::get_active_scan_types()` (single source of truth). Never hardcode the step count.
-- Canonical repo at `~/Local Sites/plugins/unattached-media-manager/` is the release source, not this test install. Deploy via `~/Local Sites/plugins/deploy.sh`.
-- `uninstall.php` deliberately does not revert `post_parent` changes.
+- Guard lives in `trash_attachment()` (single choke point for UI, bulk, job queue, CLI, REST), with the
+  UI gating as a second layer. Verified: AJAX with a valid nonce is still refused.
+- Trash view keeps Restore / Delete Permanently when trash is disabled, so pre-existing trashed items
+  are still recoverable.
+- Mixed `aioms_*` / `mui_*` / `unmam_*` identifiers stay. Do not rename.
 
 ## Next steps
-- 1.1.0 is built + verified locally but NOT shipped. To release: commit, then `~/Local Sites/plugins/deploy.sh` (WP.org SVN) + GitHub. Reply to @galbaras forum thread once live.
-- No TODO/FIXME markers in source; no pending feature branch.
-- Possible future (requested by user @galbaras, not committed): dropdown table/column picker for custom tables; built-in scan map for popular plugins (e.g. Tribulant Newsletters).
-- Separate, unshipped: local-only fix to the OTHER plugin `remove-taxonomy-url` (`add_settings_error` fatal); ship as its own RTU release if desired.
+- 1.1.1: commit + tag in canonical repo, deploy via `~/Local Sites/plugins/deploy.sh`, push to GitHub.
+- 1.2.0 (scanner coverage, ~2 days), all three from forum threads: post types by `show_ui` not `public`
+  (Bricks templates); terms scan pass + ACF term fields + widen ACF field types beyond image/gallery/file
+  (Gal Baras, product_cat WYSIWYG); options parser `LIMIT 1000` + name-pattern restriction; filesystem
+  grep parser for theme/plugin PHP, CSS, JS.
+- 1.3.0 (deferred, 3-4 days): rendered-HTML + CSS crawl verification. Needs a loopback preflight.
+- Bug found 2026-09-03, unfixed: CLI stats compute unused as `total - distinct_referenced`, which counts
+  orphaned reference rows as referenced. On FLP that read 261 vs the correct 271. Orphan rows are left
+  behind when media is deleted outside the plugin. Fix the stats math and hook `delete_attachment`.
+- Cosmetic, unfixed: admin page H1 still reads "All-in-One Media Solution" (old plugin name).
 
 ## Key files
+- `includes/class-unmam-database.php` — trash/restore/delete, unused queries, `is_trash_available()`.
+- `includes/admin/class-unmam-admin.php` — tabs, notices, button gating (`render_unused_content()`).
 - `readme.txt` — changelog + stable tag (most edited).
-- `unattached-media-manager.php` — bootstrap, constants, settings defaults, migration.
-- `includes/admin/class-unmam-admin.php` — tabs + settings save handler.
-- `includes/class-unmam-scanner.php` — scan pipeline + active-types source of truth.
-- `includes/class-unmam-database.php` — custom tables + reference/unused queries.
-- `includes/parsers/class-unmam-custom-table-parser.php` — 1.0.9 custom-table scanning.
+- NOTE: the old test install under `media-usage-inspector` no longer exists. 1.1.1 was edited directly in
+  the canonical repo and rsynced to `~/Local Sites/flp/` for browser testing.
