@@ -1418,4 +1418,23 @@ class UNMAM_Database {
 
         return $unused_ids ? array_map( 'intval', $unused_ids ) : array();
     }
+
+    /**
+     * Every attachment currently in the trash.
+     *
+     * Trashing everything unused is one click, so putting it back has to be one click too.
+     *
+     * @return array Attachment IDs.
+     */
+    public static function get_all_trashed_attachment_ids() {
+        global $wpdb;
+
+        $ids = $wpdb->get_col(
+            "SELECT ID FROM {$wpdb->posts}
+             WHERE post_type = 'attachment' AND post_status = 'trash'
+             ORDER BY ID ASC"
+        );
+
+        return $ids ? array_map( 'intval', $ids ) : array();
+    }
 }

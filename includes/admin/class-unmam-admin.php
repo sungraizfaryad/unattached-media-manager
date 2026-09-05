@@ -184,6 +184,7 @@ class UNMAM_Admin {
                 'confirmDeleteBulk' => __( 'Permanently delete all selected media files? This cannot be undone!', 'unattached-media-manager' ),
                 'confirmEmptyTrash' => __( 'Permanently delete ALL trashed media files? This cannot be undone!', 'unattached-media-manager' ),
                 'confirmTrashAllUnused' => __( 'Move ALL unused media files to trash? This will affect all unused media, not just what\'s visible on this page.', 'unattached-media-manager' ),
+                'confirmRestoreAll'    => __( 'Restore every item in the trash? Files are put back exactly as they were.', 'unattached-media-manager' ),
                 'confirmRevertAll' => __( 'Revert ALL active attachment changes? This will detach all media that was attached by this plugin.', 'unattached-media-manager' ),
                 'confirmAttachAll' => __( 'Attach ALL used but unattached media files? This will assign parent posts to all media files that are currently in use.', 'unattached-media-manager' ),
                 'confirmAttachSelected' => __( 'Attach the selected media files to their suggested parent posts?', 'unattached-media-manager' ),
@@ -1488,7 +1489,15 @@ class UNMAM_Admin {
     private function render_unused_content() {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Pagination, no action taken
         $current_page = isset( $_GET['paged'] ) ? max( 1, intval( $_GET['paged'] ) ) : 1;
-        $per_page = 20;
+
+        // Fixed at 20 before, which made restoring a large trash painfully slow because
+        // Select All only ever covers the current page.
+        $per_page_options = array( 20, 50, 100, 200 );
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display preference, no action taken
+        $per_page = isset( $_GET['mui_per_page'] ) ? intval( $_GET['mui_per_page'] ) : 20;
+        if ( ! in_array( $per_page, $per_page_options, true ) ) {
+            $per_page = 20;
+        }
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- View toggle, no action taken
         $view = isset( $_GET['view'] ) ? sanitize_text_field( wp_unslash( $_GET['view'] ) ) : 'unused';
         if ( ! in_array( $view, array( 'unused', 'excluded', 'trash' ), true ) ) {
@@ -1630,17 +1639,51 @@ class UNMAM_Admin {
                     </li>
                 </ul>
 
+                <div class="alignleft" style="margin: 5px 0 0 12px;">
+                    <label for="mui-per-page" class="screen-reader-text"><?php esc_html_e( 'Items per page', 'unattached-media-manager' ); ?></label>
+                    <select id="mui-per-page" onchange="window.location.href=this.value;">
+                        <?php foreach ( $per_page_options as $option ) : ?>
+                            <option value="<?php echo esc_url( add_query_arg( array( 'mui_per_page' => $option, 'paged' => false ) ) ); ?>" <?php selected( $per_page, $option ); ?>>
+                                <?php
+                                printf(
+                                    /* translators: %d: number of items shown per page */
+                                    esc_html__( 'Show %d per page', 'unattached-media-manager' ),
+                                    (int) $option
+                                );
+                                ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
                 <div class="alignright" style="margin-top: 5px;">
                     <?php if ( 'trash' === $view && $trash_count > 0 ) : ?>
-                        <button type="button" class="button button-link-delete" id="mui-empty-trash">
-                            <?php esc_html_e( 'Empty Trash', 'unattached-media-manager' ); ?>
+                        <?php
+                        // Recovery actions come first, and the destructive ones are pushed
+                        // away to the right. Restore used to sit between Empty Trash and
+                        // Delete Permanently, which is a bad place for it when someone is
+                        // working through page after page of restores.
+                        ?>
+                        <button type="button" class="button button-primary" id="mui-restore-all">
+                            <?php
+                            printf(
+                                /* translators: %d: number of trashed media files */
+                                esc_html__( 'Restore All %d', 'unattached-media-manager' ),
+                                intval( $trash_count )
+                            );
+                            ?>
                         </button>
                         <button type="button" class="button" id="mui-restore-selected" disabled>
                             <?php esc_html_e( 'Restore Selected', 'unattached-media-manager' ); ?>
                         </button>
-                        <button type="button" class="button button-link-delete" id="mui-delete-selected-permanently" disabled>
-                            <?php esc_html_e( 'Delete Permanently', 'unattached-media-manager' ); ?>
-                        </button>
+                        <span class="mui-danger-zone">
+                            <button type="button" class="button button-link-delete" id="mui-delete-selected-permanently" disabled>
+                                <?php esc_html_e( 'Delete Permanently', 'unattached-media-manager' ); ?>
+                            </button>
+                            <button type="button" class="button button-link-delete" id="mui-empty-trash">
+                                <?php esc_html_e( 'Empty Trash', 'unattached-media-manager' ); ?>
+                            </button>
+                        </span>
                     <?php elseif ( 'unused' === $view && $unused_count > 0 ) : ?>
                         <?php if ( ! $has_filters && $trash_available ) : ?>
                             <button type="button" class="button button-link-delete" id="mui-trash-all-unused">

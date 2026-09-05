@@ -517,6 +517,12 @@
                 self.trashAllUnused();
             });
 
+            // Trash view: Restore everything (uses job queue)
+            $(document).on('click', '#mui-restore-all', function(e) {
+                e.preventDefault();
+                self.restoreAllTrashed();
+            });
+
             // Unused Media tab: Copy file URL to clipboard
             $(document).on('click', '.mui-copy-url', function(e) {
                 e.preventDefault();
@@ -2124,6 +2130,27 @@
 
                 // Start job with frontend-driven processing (no page reload)
                 self.startJobWithLoop('trash', [], {}, '#mui-trash-all-unused', originalText);
+            });
+        },
+
+        /**
+         * Restore every trashed item (uses job queue)
+         */
+        restoreAllTrashed: function() {
+            var self = this;
+
+            this.showConfirmModal({
+                title: 'Restore All',
+                message: unmamAdmin.strings.confirmRestoreAll,
+                confirmText: 'Restore All',
+                type: 'warning'
+            }, function() {
+                var $button = $('#mui-restore-all');
+                var originalText = $button.text();
+
+                $button.prop('disabled', true).text(unmamAdmin.strings.restoring);
+
+                self.startJobWithLoop('restore', [], {}, '#mui-restore-all', originalText);
             });
         },
 

@@ -618,6 +618,15 @@ class UNMAM_Job_Queue {
             }
         }
 
+        // Handle special case for restore all trashed
+        if ( self::JOB_RESTORE === $job_type && empty( $item_ids ) ) {
+            $item_ids = UNMAM_Database::get_all_trashed_attachment_ids();
+
+            if ( empty( $item_ids ) ) {
+                wp_send_json_error( __( 'No trashed media found.', 'unattached-media-manager' ) );
+            }
+        }
+
         // Handle special case for revert all active
         if ( self::JOB_REVERT === $job_type && empty( $item_ids ) ) {
             $active_ids = UNMAM_History::get_all_active_ids();
