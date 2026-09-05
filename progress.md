@@ -2,7 +2,7 @@ _Last updated: 2026-09-05._
 _Quick status only. Full detail in CLAUDE.md and cloud memory (`project_unmam_*`)._
 
 ## Done
-- 1.2.0 (BUILT + tested on FLP, committed to branch `1.2.0-scanner-coverage`, NOT released).
+- 1.2.0 (LIVE on WP.org + GitHub, SVN r3682339, tag a42e108).
   Accuracy of the Unused list, both directions.
   Reported unused but in use: stale `scan_post_types` snapshot (types added after the plugin
   were never scanned); candidates filtered on `public` only (missed builder templates,
@@ -32,10 +32,11 @@ _Quick status only. Full detail in CLAUDE.md and cloud memory (`project_unmam_*`
   numbers anywhere is what made Meta Box invent references.
 
 ## Next steps
-- Release 1.2.0: deploy via `~/Local Sites/plugins/deploy.sh`, then push branch + tag. Not yet
-  merged to main.
-- Reply to @galbaras (terms) and @kreativelabs (Bricks) once 1.3.0 lands; both are unverified
-  diagnoses awaiting their confirmation.
+- 1.2.0 shipped 2026-09-05. Watch the forum for fallout; it changes what counts as "used" on
+  every install, so expect unused counts to move on upgrade.
+- @adeqx: tell him the theme-file / CSS gap is still open, so he does not re-test and find the
+  list still wrong. @galbaras: his ACF-on-terms case is 1.3.0, keep the wp_termmeta custom-table
+  entry until then. @kreativelabs (Bricks): still an unverified diagnosis awaiting his reply.
 - 1.3.0: terms scan pass + ACF term fields + widen ACF field types; filesystem parser for
   theme/plugin PHP, CSS and JS.
 - Known, unfixed: 4 pre-existing `WordPress.DB.PreparedSQL.NotPrepared` Plugin Check errors in
