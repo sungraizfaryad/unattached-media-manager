@@ -47,7 +47,7 @@ rsync -a --delete \
 - **A multi-batch step must return `running` until genuinely done.** Both the CLI loop and `process_batch()` only advance when a step reports `completed`.
 - **A resumable step must rewind when re-entered.** `scan_options()` rewinds its cursor when the stored status is already `completed`. Without that, a rescan not started with a reset sweeps nothing at all, an option edited to point at a different image is never re-read, the old reference lingers so that file still looks used, and the newly referenced file looks unused. This shipped broken briefly during 1.2.0 development and was caught in review.
 - **`index_options()` must loop to completion.** It is the "this changed, recheck it now" entry point used on ACF options saves. Its first batch clears the previous option references, so stopping after one batch drops references held further down `wp_options`.
-- **Two lists of scan types are still hardcoded** and drift: `wp unmam status` (already missing `custom_tables`) and `UNMAM_Scanner::get_scan_status()`. Update both when adding a type.
+- **Three lists of scan types are still hardcoded** and drift: `wp unmam status` (`class-unmam-cli-commands.php:616`), the REST `/scan/batch` `enum` (`class-unmam-rest-controller.php:108`) and `UNMAM_Scanner::get_scan_status()`. The first two are already missing `custom_tables`, so a REST caller cannot run that step at all. Update all three when adding a type, or point them at `get_active_scan_types()`.
 
 **Reference correctness**
 
@@ -74,7 +74,7 @@ rsync -a --delete \
 ## 4. Architecture map
 
 Core (`includes/`):
-- `class-unmam-database.php` — the 3 custom tables, reference insert/dedupe, unused queries, statistics, `url_to_attachment_id()`, `is_attachment_id()`, trash/restore/delete.
+- `class-unmam-database.php` — 2 of the 3 custom tables (`wp_unmam_media_references`, `wp_unmam_scan_progress`), reference insert/dedupe, unused queries, statistics, `url_to_attachment_id()`, `is_attachment_id()`, trash/restore/delete. The third table, attachment history, is created by `UNMAM_History::create_table()`, which `create_tables()` calls.
 - `class-unmam-scanner.php` — parser registry, scan pipeline, `get_active_scan_types()`, batch and completion logic.
 - `class-unmam-background-processor.php` — cron, loopback and frontend AJAX dispatch, process lock, chain advance.
 - `class-unmam-job-queue.php` — single-job queue for bulk trash/restore/delete/attach/revert/empty-trash. Empty item list means "everything" for attach, trash, restore and revert.
@@ -86,7 +86,17 @@ Admin (`includes/admin/`): `class-unmam-admin.php` (5 tabs plus the settings sav
 
 API/CLI: `includes/api/class-unmam-rest-controller.php` (namespace `unmam/v1`, and its `/scan/batch` endpoint has its own hardcoded scan-type enum), `includes/cli/class-unmam-cli-commands.php` (`wp unmam ...`).
 
-Parsers (`includes/parsers/`): content, block, acf, meta, options, widget, elementor, metabox, woocommerce, seo, custom-table. All implement `UNMAM_Parser_Interface` (`parse_post`, `get_name`) except the custom-table parser, which is not per-post. A parser may additionally define `parse_options()` for site-wide media; `scan_options()` calls it on every parser that has one. That dispatch did not exist before 1.2.0, so the WooCommerce and SEO implementations were dead code.
+Parsers (`includes/parsers/`): content, block, acf, meta, options, widget, elementor, metabox, woocommerce, seo, custom-table.
+
+Eight implement `UNMAM_Parser_Interface` (`parse_post`, `get_name`) and are called per post by `index_post()`. **Three deliberately do not**, because they are not per-post, and a new one should only implement the interface if it really is:
+
+- `UNMAM_Options_Parser` — site-wide, entry point `parse_options()`, driven by `scan_options()`.
+- `UNMAM_Widget_Parser` — site-wide, driven by `scan_widgets()`.
+- `UNMAM_Custom_Table_Parser` — driven by `scan_custom_tables()` with its own cursor.
+
+Note `index_post()` skips anything that is not an instance of the interface, so giving one of those three a `parse_post()` without also implementing the interface would silently do nothing.
+
+A parser may additionally define `parse_options()` for site-wide media, and `scan_options()` calls it on every parser that has one. That dispatch did not exist before 1.2.0, so the WooCommerce and SEO implementations were dead code for their whole life.
 
 ## 5. Testing
 
