@@ -84,4 +84,5 @@ was verified end to end; the nonce is in the `unmamAdmin` object in the page sou
   rather than editing `wp-config.php`.
 - WordPress.org Plugin Check, compared against the previous release rather than read as an
   absolute. Install the previous tag as a second plugin folder and diff the error counts.
-  4 pre-existing `NotPrepared` errors are expected.
+  4 pre-existing `NotPrepared` errors are expected: 3 in `get_unused_attachments_detailed()`
+  and 1 in the custom-table parser.

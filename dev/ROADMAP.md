@@ -42,9 +42,14 @@ pattern in `scan_posts_batch()` transfers directly.
    step, and a bare source-type delete wipes them. Use
    `UNMAM_Database::delete_references_by_source_and_context()`, which exists for this reason.
 2. **Replace Media.** `UNMAM_Attachment_Manager::replace_single_reference()` branches on
-   `context_type` only, then calls `get_post_meta()` / `update_post_meta()` on `source_id`.
-   Give it a term branch, or an explicit bail, before term rows can exist. Otherwise it reads
-   and writes the wrong table silently.
+   `context_type` only, and its `postmeta` / `acf` cases call `get_post_meta()` and
+   `update_post_meta()` on `source_id`. It does have a `default:` case returning "Unsupported
+   reference type", so **as long as term rows use distinct context types** (`term_meta`,
+   `term_acf`) they fall through to that and safely do nothing. Replace Media just will not
+   work for terms until a branch is added.
+   The danger is reusing `postmeta` or `acf` as the context type for a term row. Then the
+   existing cases match, and it reads and writes post meta using a term id as the post id.
+   Do not reuse those strings.
 3. **Where Used.** 1.2.0 stopped it rendering a wrong post title for non-post rows, but it
    now renders nothing useful for a term. It needs the term name plus `get_edit_term_link()`.
    There are four PHP copies of this rendering (`class-unmam-media-modal.php` twice, the REST
@@ -108,8 +113,11 @@ plainly in the changelog rather than overselling it.
 
 ## Smaller things, good filler alongside a release
 
-- Four pre-existing `WordPress.DB.PreparedSQL.NotPrepared` Plugin Check errors in
-  `get_unused_attachments_detailed()`. Present since well before 1.2.0.
+- Four pre-existing `WordPress.DB.PreparedSQL.NotPrepared` Plugin Check errors, present since
+  well before 1.2.0: three in `get_unused_attachments_detailed()`
+  (`class-unmam-database.php` 555, 557, 571) and one in
+  `class-unmam-custom-table-parser.php:157`. All four are dynamically built SQL with the
+  values bound separately, which is why they were left alone.
 - The admin page heading still reads "All-in-One Media Solution", the plugin's original name.
   User visible, unlike the internal prefixes, which are deliberate.
 - **Three hardcoded scan-type lists, all already stale.** `wp unmam status`
