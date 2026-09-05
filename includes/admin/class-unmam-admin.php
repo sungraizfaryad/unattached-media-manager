@@ -686,7 +686,11 @@ class UNMAM_Admin {
 
                 <h2 class="title"><?php esc_html_e( 'Post Types to Scan', 'unattached-media-manager' ); ?></h2>
                 <p class="description">
-                    <?php esc_html_e( 'Choose which post types the scanner walks for media references. Custom post types registered by your theme or plugins (e.g. Projects, Portfolio, Events) appear here. Untick a type to exclude its content from scans — useful for noisy or private post types.', 'unattached-media-manager' ); ?>
+                    <?php esc_html_e( 'Choose which post types the scanner walks for media references. Any post type with an admin screen appears here, including builder templates and reusable blocks. Types added by a plugin later are picked up automatically.', 'unattached-media-manager' ); ?>
+                </p>
+                <p class="description" style="color: #b32d2e;">
+                    <strong><?php esc_html_e( 'Careful:', 'unattached-media-manager' ); ?></strong>
+                    <?php esc_html_e( 'Unticking a post type means media used only there is no longer counted as used, so it will start appearing in the Unused list and could be deleted. Only untick a type if you are sure it holds no media you want to keep.', 'unattached-media-manager' ); ?>
                 </p>
 
                 <table class="form-table">
@@ -1779,8 +1783,8 @@ class UNMAM_Admin {
                     <p style="margin: 10px 0 0; color: #50575e; font-size: 13px;">
                         <?php
                         printf(
-                            /* translators: %d: number of matching media files */
-                            esc_html( _n( 'Showing %d matching unused file (of %d total).', 'Showing %d matching unused files (of %d total).', intval( $media['total'] ), 'unattached-media-manager' ) ),
+                            /* translators: 1: number of matching media files, 2: total number of unused files */
+                            esc_html( _n( 'Showing %1$d matching unused file (of %2$d total).', 'Showing %1$d matching unused files (of %2$d total).', intval( $media['total'] ), 'unattached-media-manager' ) ),
                             intval( $media['total'] ),
                             intval( $unused_count )
                         );

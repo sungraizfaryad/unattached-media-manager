@@ -407,12 +407,22 @@ class UNMAM_Scanner {
         $progress = UNMAM_Database::get_scan_progress( 'options' );
         $cursor   = $progress ? (int) $progress['last_processed_id'] : 0;
 
+        // A finished step being asked to run again means a new pass, so rewind. Without this
+        // the cursor stays parked at the last option_id from the previous pass, and a rescan
+        // that was not started with a reset sweeps nothing: an option edited to point at a
+        // different image is never re-read, the old reference lingers so that file still
+        // looks used, and the newly referenced file looks unused.
+        if ( $progress && 'completed' === $progress['status'] ) {
+            $cursor = 0;
+        }
+
         $references = array();
 
         // First batch of a fresh run: clear previous rows and collect the site-wide media
         // that is not tied to a post. Those lookups are a handful of get_option() calls, so
         // they run once up front rather than on every batch.
         if ( 0 === $cursor ) {
+            delete_option( 'unmam_options_skipped_total' );
             UNMAM_Database::delete_references_by_source( 0, 'option' );
 
             // The WooCommerce parser reports category thumbnails as term rows rather than
@@ -463,11 +473,16 @@ class UNMAM_Scanner {
 
         // Never let a skipped option be silent - it is the difference between "no media
         // here" and "we did not look".
-        if ( $skipped > 0 ) {
+        // Carry the running total across batches. Reporting only the last batch's count would
+        // understate how much of wp_options went unread. The first batch of a pass clears it.
+        $skipped_total = (int) get_option( 'unmam_options_skipped_total', 0 ) + $skipped;
+        update_option( 'unmam_options_skipped_total', $skipped_total, false );
+
+        if ( $skipped_total > 0 ) {
             $progress_update['error_log'] = sprintf(
                 /* translators: %d: number of options skipped for being too large */
                 __( '%d option(s) skipped for exceeding the size limit.', 'unattached-media-manager' ),
-                $skipped
+                $skipped_total
             );
         }
 
@@ -485,10 +500,27 @@ class UNMAM_Scanner {
     }
 
     /**
-     * Index options (alias for scan_options for consistency)
+     * Re-read every option now, in one go.
+     *
+     * This is the "something just changed, check it again" entry point, used when an ACF
+     * options page is saved. It must not stop after a single batch: the first batch clears
+     * the previous option references, so leaving the sweep unfinished would drop references
+     * held in options further down the table, and media referenced only there would look
+     * unused until the next full scan.
+     *
+     * @return array Result of the final batch.
      */
     public function index_options() {
-        return $this->scan_options();
+        $result = $this->scan_options();
+
+        // Bounded so a pathological wp_options table cannot spin here forever.
+        $guard = 0;
+        while ( isset( $result['status'] ) && 'completed' !== $result['status'] && $guard < 500 ) {
+            $result = $this->scan_options();
+            $guard++;
+        }
+
+        return $result;
     }
 
     /**

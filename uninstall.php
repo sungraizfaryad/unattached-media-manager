@@ -48,6 +48,7 @@ $options = array(
     'unmam_scan_paused',
     'unmam_performance_history',
     'unmam_db_version',
+    'unmam_options_skipped_total',
     'unmam_job_state',
     // Legacy options (for users upgrading from old version)
     'aioms_settings',

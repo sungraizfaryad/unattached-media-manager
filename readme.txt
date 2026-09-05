@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -353,6 +353,35 @@ Your parser should implement the `UNMAM_Parser_Interface`.
 
 == Changelog ==
 
+= 1.2.0 =
+This release is mostly about the accuracy of the Unused list, in both directions.
+
+**Media that was in use but reported as unused**
+
+* **Post types added after the plugin were never scanned.** The list of post types to scan was stored once and never refreshed, so installing any plugin that registers its own post type (WooCommerce is the common case) left everything in it unscanned, and all of its images looked unused. The list is now reconciled against what is actually registered. Post types you have deliberately unticked stay unticked.
+* **Only publicly visible post types could be scanned.** That excluded page-builder template types, and in stock WordPress it also excluded reusable blocks (patterns) and navigation menus. Any post type with an admin screen can now be scanned.
+* **Saving a post and running a full scan disagreed.** Saving indexed any post type while a full scan honoured the allow-list, so a scan could delete references that saving had just created. Both now use the same list.
+* **The WooCommerce and SEO parsers were never actually run for site-wide media.** The WooCommerce placeholder image, WooCommerce product category thumbnails, and the default OpenGraph images for Yoast and Rank Math were all unprotected despite the code for them existing.
+* **The settings scan was capped and filtered.** It only looked at options whose name matched one of five patterns, then stopped after 1000 rows with no warning. It now scans every option except a small skip list, resumes across batches, and records anything skipped for being oversized.
+* **Media URLs inside settings were only found under certain key names** (url, src, image, logo, icon, background). Any other key was ignored.
+
+**Media that was not in use but reported as used**
+
+* **Filename matching was too loose.** A file called `A.png` also matched `banana.png`, so the wrong attachment was credited with the reference. That kept unrelated files out of the Unused list, and could leave the file that really was referenced looking unused. Matching is now anchored to the whole filename. CDN and changed-domain URLs still resolve.
+* **The Meta Box parser treated every numeric custom field as an attachment ID**, so prices, user IDs and statuses became media references.
+* **`wp-image-{ID}` classes and `data-id` attributes were trusted without checking the ID.** Those survive content being copied between sites. They are now verified, and fall back to reading the image URL instead, which finds more than before.
+
+**Trash**
+
+* **New "Restore All" button.** Trashing every unused file was already one click, but restoring had to be done one page at a time.
+* **The trash buttons have been reordered.** Restore now comes first, with Delete Permanently and Empty Trash separated to the right. Restore previously sat between the two destructive buttons.
+* **New page size control** (20, 50, 100, 200) on the Unused and Trash lists, which were fixed at 20.
+
+**Also**
+
+* Fixed `wp unmam stats`, which printed "Invalid field: Metric" instead of any statistics.
+* Reference rows that point at deleted attachments are no longer created, so the count shown by WP-CLI and the count shown in the admin now agree.
+
 = 1.1.1 =
 * **Fix (data loss):** On sites with `EMPTY_TRASH_DAYS` set to 0 the WordPress trash is disabled, and "Move to Trash" silently deleted the file from the server while reporting that it had been trashed. The plugin now refuses to trash on those sites, hides the Trash buttons, and explains why.
 * **New:** The Trash view now states plainly that trashed files remain on the server and that images already placed in your content keep displaying, so a trashed file that is still in use will not show up as a broken image.
@@ -418,8 +447,11 @@ Your parser should implement the `UNMAM_Parser_Interface`.
 
 == Upgrade Notice ==
 
+= 1.2.0 =
+Much more accurate Unused list. Post types added after the plugin (such as WooCommerce products) were never scanned, so their images looked unused. Filename matching was too loose and credited the wrong file. Adds Restore All. Re-run a full scan after updating.
+
 = 1.1.1 =
-Important fix for sites with EMPTY_TRASH_DAYS set to 0, where "Move to Trash" permanently deleted files while reporting success. Also corrects misleading guidance: trashing media never produces broken images, so it cannot be used to check whether a file was still in use. Recommended for all users.
+Important fix for sites with EMPTY_TRASH_DAYS set to 0, where "Move to Trash" deleted files permanently while reporting success. Also corrects misleading guidance: trashing never breaks images, so it cannot tell you whether a file was in use.
 
 = 1.1.0 =
 Adds Copy URL and direct file View to the Unused Media tab, CSV export of unused file URLs (admin button and WP-CLI), and the ability to exclude known-good files from the unused report (with an Excluded view to undo). No rescan required.

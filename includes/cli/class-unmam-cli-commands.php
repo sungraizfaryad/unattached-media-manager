@@ -164,15 +164,16 @@ class UNMAM_CLI_Commands {
         WP_CLI::log( '======================' );
         WP_CLI::log( '' );
 
+        // format_items() keys each row by field name. Positional rows made this fail with
+        // "Invalid field: Metric" and printed no statistics at all.
         $summary = array(
-            array( 'Metric', 'Value' ),
-            array( 'Total Attachments', number_format( $stats['total_attachments'] ) ),
-            array( 'Referenced Attachments', number_format( $stats['referenced_attachments'] ) ),
-            array( 'Potentially Unused', number_format( $stats['unused_attachments'] ) ),
-            array( 'Total References', number_format( $stats['total_references'] ) ),
+            array( 'Metric' => 'Total Attachments',      'Value' => number_format( $stats['total_attachments'] ) ),
+            array( 'Metric' => 'Referenced Attachments', 'Value' => number_format( $stats['referenced_attachments'] ) ),
+            array( 'Metric' => 'Potentially Unused',     'Value' => number_format( $stats['unused_attachments'] ) ),
+            array( 'Metric' => 'Total References',       'Value' => number_format( $stats['total_references'] ) ),
         );
 
-        WP_CLI\Utils\format_items( 'table', array_slice( $summary, 1 ), array( 'Metric', 'Value' ) );
+        WP_CLI\Utils\format_items( 'table', $summary, array( 'Metric', 'Value' ) );
 
         if ( ! empty( $stats['by_context'] ) ) {
             WP_CLI::log( '' );

@@ -1500,7 +1500,7 @@
                     (unmamAdmin.strings.noItemsInView || 'No media in this view.') +
                     '</p>'
                 );
-                $('#mui-export-unused-urls, #mui-trash-all-unused, #mui-trash-selected, #mui-restore-selected, #mui-delete-selected-permanently').prop('disabled', true);
+                $('#mui-export-unused-urls, #mui-trash-all-unused, #mui-trash-selected, #mui-restore-all, #mui-restore-selected, #mui-delete-selected-permanently').prop('disabled', true);
             }
         },
 

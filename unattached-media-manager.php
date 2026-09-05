@@ -4,7 +4,7 @@
  * Plugin Name: Unattached Media Manager
  * Plugin URI: https://wordpress.org/plugins/unattached-media-manager/
  * Description: Fix the WordPress Unattached media filter. Automatically attach used media files to their posts so you can safely clean up your library.
- * Version: 1.1.1
+ * Version: 1.2.0
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author: Sungraiz Faryad
@@ -77,7 +77,7 @@ function unmam_get_scannable_post_type_candidates()
 }
 
 // Plugin constants
-define('UNMAM_VERSION', '1.1.1');
+define('UNMAM_VERSION', '1.2.0');
 define('UNMAM_PLUGIN_FILE', __FILE__);
 define('UNMAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('UNMAM_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -451,11 +451,18 @@ final class Unattached_Media_Manager
         // off", so an unticked type stays unticked.
         if (is_array($settings) && isset($settings['scan_post_types'])) {
             $candidates = unmam_get_scannable_post_type_candidates();
-            $known      = isset($settings['scan_post_types_known']) && is_array($settings['scan_post_types_known'])
-                ? $settings['scan_post_types_known']
-                : $settings['scan_post_types'];
 
-            $newly_seen = array_values(array_diff($candidates, $known));
+            if (isset($settings['scan_post_types_known']) && is_array($settings['scan_post_types_known'])) {
+                $known      = $settings['scan_post_types_known'];
+                $newly_seen = array_values(array_diff($candidates, $known));
+            } else {
+                // First run after upgrading. There is no record of what was offered before,
+                // so treat everything registered right now as already offered and decided on.
+                // Falling back to the admin's own selection here would read every type they
+                // had deliberately unticked as brand new and switch it back on.
+                $known      = $candidates;
+                $newly_seen = array();
+            }
 
             if ($newly_seen || ! isset($settings['scan_post_types_known'])) {
                 $settings['scan_post_types']       = array_values(array_unique(array_merge($settings['scan_post_types'], $newly_seen)));
