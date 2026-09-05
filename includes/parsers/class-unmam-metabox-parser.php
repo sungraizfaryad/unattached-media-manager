@@ -443,6 +443,21 @@ class UNMAM_MetaBox_Parser implements UNMAM_Parser_Interface {
     }
 
     /**
+     * Confirm an ID really is an attachment.
+     *
+     * Without this, the scan_all_post_meta() fallback treats every numeric custom field as
+     * an attachment ID, so prices, user IDs and order numbers all become media references.
+     * A value that happens to match a real attachment ID would then keep that file out of
+     * the unused list for good.
+     *
+     * @param mixed $id Candidate ID.
+     * @return bool
+     */
+    private function is_attachment( $id ) {
+        return UNMAM_Database::is_attachment_id( $id );
+    }
+
+    /**
      * Extract attachment IDs from various value formats
      *
      * @param mixed $value Field value.
@@ -457,7 +472,9 @@ class UNMAM_MetaBox_Parser implements UNMAM_Parser_Interface {
 
         // Single ID
         if ( is_numeric( $value ) ) {
-            $ids[] = (int) $value;
+            if ( $this->is_attachment( $value ) ) {
+                $ids[] = (int) $value;
+            }
             return $ids;
         }
 
@@ -466,19 +483,25 @@ class UNMAM_MetaBox_Parser implements UNMAM_Parser_Interface {
             foreach ( $value as $item ) {
                 // Direct ID
                 if ( is_numeric( $item ) ) {
-                    $ids[] = (int) $item;
+                    if ( $this->is_attachment( $item ) ) {
+                        $ids[] = (int) $item;
+                    }
                     continue;
                 }
 
                 // Array with ID key (common Meta Box format)
                 if ( is_array( $item ) && isset( $item['ID'] ) ) {
-                    $ids[] = (int) $item['ID'];
+                    if ( $this->is_attachment( $item['ID'] ) ) {
+                        $ids[] = (int) $item['ID'];
+                    }
                     continue;
                 }
 
                 // Array with id key (lowercase)
                 if ( is_array( $item ) && isset( $item['id'] ) ) {
-                    $ids[] = (int) $item['id'];
+                    if ( $this->is_attachment( $item['id'] ) ) {
+                        $ids[] = (int) $item['id'];
+                    }
                     continue;
                 }
 

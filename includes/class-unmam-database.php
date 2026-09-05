@@ -355,6 +355,34 @@ class UNMAM_Database {
     }
 
     /**
+     * Delete references matching both a source type and a context type.
+     *
+     * Global scans insert rows that are not keyed to a post, so neither the source_id nor
+     * the source_type delete is specific enough on its own. The WooCommerce category
+     * thumbnails written during the options step are source_type 'term', and so are the rows
+     * the terms step writes, so clearing one must not wipe the other.
+     *
+     * @param string $source_type  Source type.
+     * @param string $context_type Context type.
+     * @return int Number of rows deleted.
+     */
+    public static function delete_references_by_source_and_context( $source_type, $context_type ) {
+        global $wpdb;
+
+        $table = self::get_table_name( 'references' );
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safely generated
+        return $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$table} WHERE source_type = %s AND context_type = %s",
+                $source_type,
+                $context_type
+            )
+        );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+    }
+
+    /**
      * Delete references by attachment
      *
      * @param int $attachment_id Attachment ID.
@@ -1192,6 +1220,21 @@ class UNMAM_Database {
     }
 
     /**
+     * Whether an ID belongs to an actual attachment.
+     *
+     * IDs lifted out of markup cannot be trusted. A wp-image-123 class survives being
+     * copied between sites, so the ID may point at nothing here, or at an unrelated post.
+     *
+     * @param mixed $id Candidate attachment ID.
+     * @return bool
+     */
+    public static function is_attachment_id( $id ) {
+        $id = (int) $id;
+
+        return $id > 0 && 'attachment' === get_post_type( $id );
+    }
+
+    /**
      * Resolve URL to attachment ID
      *
      * @param string $url Image URL.
@@ -1227,14 +1270,30 @@ class UNMAM_Database {
             return (int) $attachment_id;
         }
 
-        // Try partial match on filename
+        // Last resort, match on filename. This is what lets a CDN or a changed domain still
+        // resolve, since only the host differs.
+        //
+        // The match must be anchored to a path boundary. Matching any value ENDING in the
+        // filename means a short name like "a.png" also matches "banana.png" and
+        // "2026/09/termmeta.png", so the wrong attachment gets credited with the reference:
+        // an unrelated file looks used and never shows up for cleanup, while the file that
+        // really was referenced can be left looking unused.
         $filename = basename( $url );
         $filename = preg_replace( '/-\d+x\d+(?=\.[a-z]{3,4}$)/i', '', $filename );
 
+        if ( '' === $filename ) {
+            return 0;
+        }
+
+        // _wp_attached_file holds either "2026/09/name.png" or a bare "name.png".
         $attachment_id = $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value LIKE %s",
-                '%' . $wpdb->esc_like( $filename )
+                "SELECT post_id FROM {$wpdb->postmeta}
+                 WHERE meta_key = '_wp_attached_file'
+                 AND ( meta_value = %s OR meta_value LIKE %s )
+                 LIMIT 1",
+                $filename,
+                '%/' . $wpdb->esc_like( $filename )
             )
         );
 

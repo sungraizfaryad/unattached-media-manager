@@ -694,9 +694,13 @@ class UNMAM_Admin {
                         ? $settings['scan_post_types']
                         : unmam_default_scan_post_types();
 
-                    $public_types = get_post_types( array( 'public' => true ), 'objects' );
-                    // Exclude attachment (it IS media, not a referrer).
-                    unset( $public_types['attachment'] );
+                    $public_types = array();
+                    foreach ( unmam_get_scannable_post_type_candidates() as $candidate_slug ) {
+                        $candidate_obj = get_post_type_object( $candidate_slug );
+                        if ( $candidate_obj ) {
+                            $public_types[ $candidate_slug ] = $candidate_obj;
+                        }
+                    }
 
                     $builtin_types = array();
                     $custom_types  = array();
@@ -815,9 +819,9 @@ class UNMAM_Admin {
             ? array_map( 'sanitize_key', wp_unslash( $_POST['unmam_scan_post_type'] ) )
             : array();
 
-        // Only accept slugs that are currently registered as public post types
+        // Only accept slugs the plugin actually offers
         // (defends against tampered POSTs registering arbitrary strings).
-        $registered_public = get_post_types( array( 'public' => true ), 'names' );
+        $registered_public = unmam_get_scannable_post_type_candidates();
         $scan_post_types   = array_values( array_intersect( $submitted_post_types, $registered_public ) );
         // Strip attachment as a safety net.
         $scan_post_types   = array_values( array_diff( $scan_post_types, array( 'attachment' ) ) );
@@ -876,6 +880,10 @@ class UNMAM_Admin {
             'scan_options'         => isset( $_POST['unmam_scan_options'] ),
             'excluded_post_types'  => array( 'revision', 'nav_menu_item' ),
             'scan_post_types'      => $scan_post_types,
+            // Saving means every type currently on offer has been shown to the admin and
+            // decided on. Recording that is what stops the reconciliation on read from
+            // re-ticking a type they just unticked.
+            'scan_post_types_known' => unmam_get_scannable_post_type_candidates(),
             'scan_custom_tables'   => $custom_tables,
             'resource_mode'        => $resource_mode,
             'processing_mode'      => $processing_mode,

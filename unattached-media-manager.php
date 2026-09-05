@@ -34,9 +34,46 @@ if (! defined('ABSPATH')) {
  */
 function unmam_default_scan_post_types()
 {
-    $types = get_post_types(array('public' => true), 'names');
-    // Always exclude attachments (they ARE the media) and revisions/nav menu items (handled by excluded_post_types).
-    return array_values(array_diff($types, array('attachment', 'revision', 'nav_menu_item')));
+    return unmam_get_scannable_post_type_candidates();
+}
+
+/**
+ * Post types that may be offered for scanning.
+ *
+ * Filtering on public => true alone missed two important groups. Builder template types
+ * (Bricks and similar) register with public => false but show_ui => true, and so do
+ * reusable blocks (wp_block), which routinely hold images. Anything excluded here can
+ * never be scanned and its media is reported unused, so the list errs on the side of
+ * including a type rather than leaving it out.
+ *
+ * @return string[] Post type slugs.
+ */
+function unmam_get_scannable_post_type_candidates()
+{
+    $types = array_unique(array_merge(
+        get_post_types(array('public' => true), 'names'),
+        get_post_types(array('show_ui' => true), 'names')
+    ));
+
+    // Attachments are the media itself, not a place media is referenced from. The rest
+    // hold no user content: revisions duplicate their parent, and the others are internal
+    // bookkeeping that would only add scan time.
+    $excluded = array(
+        'attachment',
+        'revision',
+        'nav_menu_item',
+        'oembed_cache',
+        'customize_changeset',
+        'user_request',
+    );
+
+    /**
+     * Filter the post types the plugin will consider scanning at all.
+     *
+     * @since 1.2.0
+     * @param string[] $types Candidate post type slugs.
+     */
+    return array_values(apply_filters('unmam_scannable_post_types', array_diff($types, $excluded)));
 }
 
 // Plugin constants
@@ -404,6 +441,27 @@ final class Unattached_Media_Manager
         if (is_array($settings) && ! isset($settings['scan_post_types'])) {
             $settings['scan_post_types'] = unmam_default_scan_post_types();
             update_option('unmam_settings', $settings);
+        }
+
+        // Post types registered after this setting was first stored were silently never
+        // scanned, because the stored list is a snapshot. Install any plugin that adds a
+        // post type and every image used only there gets reported unused. Reconcile on read
+        // so new types are picked up, while remembering which types have already been
+        // offered: that is what separates "never seen this type" from "the admin turned it
+        // off", so an unticked type stays unticked.
+        if (is_array($settings) && isset($settings['scan_post_types'])) {
+            $candidates = unmam_get_scannable_post_type_candidates();
+            $known      = isset($settings['scan_post_types_known']) && is_array($settings['scan_post_types_known'])
+                ? $settings['scan_post_types_known']
+                : $settings['scan_post_types'];
+
+            $newly_seen = array_values(array_diff($candidates, $known));
+
+            if ($newly_seen || ! isset($settings['scan_post_types_known'])) {
+                $settings['scan_post_types']       = array_values(array_unique(array_merge($settings['scan_post_types'], $newly_seen)));
+                $settings['scan_post_types_known'] = array_values(array_unique(array_merge($known, $candidates)));
+                update_option('unmam_settings', $settings);
+            }
         }
 
         // Lazy migration: 1.0.9 introduced scan_custom_tables (opt-in, default empty).

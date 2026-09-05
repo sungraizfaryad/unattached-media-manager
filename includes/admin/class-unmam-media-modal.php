@@ -138,7 +138,7 @@ class UNMAM_Media_Modal {
                 <?php foreach ( $references as $ref ) : ?>
                 <li class="mui-reference-item">
                     <span class="mui-ref-context"><?php echo esc_html( $ref['context_label'] ); ?></span>
-                    <?php if ( $ref['source_id'] > 0 ) : ?>
+                    <?php if ( 'post' === $ref['source_type'] && $ref['source_id'] > 0 ) : ?>
                         <span class="mui-ref-source">
                             <?php
                             $source_title = get_the_title( $ref['source_id'] );
@@ -252,7 +252,7 @@ class UNMAM_Media_Modal {
 
         // Enrich references with titles
         foreach ( $references as &$ref ) {
-            if ( $ref['source_id'] > 0 ) {
+            if ( 'post' === $ref['source_type'] && $ref['source_id'] > 0 ) {
                 /* translators: %d: post ID */
                 $ref['source_title'] = get_the_title( $ref['source_id'] ) ?: sprintf( __( 'Post #%d', 'unattached-media-manager' ), $ref['source_id'] );
                 $ref['edit_link']    = get_edit_post_link( $ref['source_id'] );

@@ -115,13 +115,16 @@ class UNMAM_Content_Parser implements UNMAM_Parser_Interface {
      * @return int Attachment ID or 0.
      */
     private function get_attachment_id_from_img( $img_tag ) {
-        // Try wp-image-XXX class first (most reliable)
-        if ( preg_match( '/wp-image-(\d+)/i', $img_tag, $matches ) ) {
+        // Try wp-image-XXX class first, but only when the ID really is an attachment here.
+        // These classes survive content being copied between sites, so the ID can point at
+        // nothing, or at an unrelated post. When it does not check out, fall through to the
+        // src URL below rather than giving up.
+        if ( preg_match( '/wp-image-(\d+)/i', $img_tag, $matches ) && UNMAM_Database::is_attachment_id( $matches[1] ) ) {
             return (int) $matches[1];
         }
 
         // Try data-id attribute
-        if ( preg_match( '/data-id=["\'](\d+)["\']/i', $img_tag, $matches ) ) {
+        if ( preg_match( '/data-id=["\'](\d+)["\']/i', $img_tag, $matches ) && UNMAM_Database::is_attachment_id( $matches[1] ) ) {
             return (int) $matches[1];
         }
 

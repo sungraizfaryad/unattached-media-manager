@@ -276,7 +276,7 @@ class UNMAM_REST_Controller extends WP_REST_Controller {
 
         // Enrich with post titles
         foreach ( $references as &$ref ) {
-            if ( $ref['source_id'] > 0 ) {
+            if ( 'post' === $ref['source_type'] && $ref['source_id'] > 0 ) {
                 $ref['source_title'] = get_the_title( $ref['source_id'] );
                 $ref['edit_url']     = get_edit_post_link( $ref['source_id'], 'raw' );
             }

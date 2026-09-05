@@ -396,8 +396,9 @@ class UNMAM_Widget_Parser {
      * @return int
      */
     private function get_attachment_from_img( $img_tag ) {
-        // Try wp-image-XXX class
-        if ( preg_match( '/wp-image-(\d+)/i', $img_tag, $matches ) ) {
+        // Only trust the class when the ID really is an attachment on this site; otherwise
+        // fall through to resolving the src URL.
+        if ( preg_match( '/wp-image-(\d+)/i', $img_tag, $matches ) && UNMAM_Database::is_attachment_id( $matches[1] ) ) {
             return (int) $matches[1];
         }
 

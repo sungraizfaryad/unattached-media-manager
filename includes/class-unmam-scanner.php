@@ -300,6 +300,14 @@ class UNMAM_Scanner {
             return;
         }
 
+        // Live indexing used to run for every post type while the batch scan honoured the
+        // allow-list, so a full scan would delete references that saving a post had just
+        // created. Whether media looked "used" then depended on which ran last.
+        $settings = Unattached_Media_Manager::get_setting();
+        if ( ! in_array( $post->post_type, $this->get_allowed_post_types( $settings ), true ) ) {
+            return;
+        }
+
         // Clear existing references for this post
         UNMAM_Database::delete_references_by_source( $post_id, 'post' );
 
@@ -396,28 +404,78 @@ class UNMAM_Scanner {
     public function scan_options() {
         $this->ensure_parsers_initialized();
 
-        // Clear existing option references
-        UNMAM_Database::delete_references_by_source( 0, 'option' );
+        $progress = UNMAM_Database::get_scan_progress( 'options' );
+        $cursor   = $progress ? (int) $progress['last_processed_id'] : 0;
 
         $references = array();
 
-        if ( isset( $this->parsers['options'] ) ) {
-            $references = $this->parsers['options']->parse_options();
+        // First batch of a fresh run: clear previous rows and collect the site-wide media
+        // that is not tied to a post. Those lookups are a handful of get_option() calls, so
+        // they run once up front rather than on every batch.
+        if ( 0 === $cursor ) {
+            UNMAM_Database::delete_references_by_source( 0, 'option' );
+
+            // The WooCommerce parser reports category thumbnails as term rows rather than
+            // option rows, so they need clearing separately or they would accumulate on
+            // every rescan.
+            UNMAM_Database::delete_references_by_source_and_context( 'term', 'woocommerce' );
+
+            // Any parser may expose parse_options() for site-wide references. It is
+            // deliberately not part of UNMAM_Parser_Interface, which is why this looks for
+            // the method rather than the interface.
+            foreach ( $this->parsers as $parser ) {
+                if ( ! method_exists( $parser, 'parse_options' ) ) {
+                    continue;
+                }
+
+                $parser_refs = $parser->parse_options();
+                if ( ! empty( $parser_refs ) ) {
+                    $references = array_merge( $references, $parser_refs );
+                }
+            }
         }
 
-        // Save references
+        // Page through wp_options itself, resuming from the stored cursor.
+        $rows_read = 0;
+        $skipped   = 0;
+        $all_done  = true;
+
+        if ( isset( $this->parsers['options'] ) ) {
+            $batch_size = max( 50, (int) UNMAM_Resource_Monitor::instance()->get_recommended_batch_size() * 10 );
+            $batch      = $this->parsers['options']->parse_generic_options_batch( $cursor, $batch_size );
+
+            $references = array_merge( $references, $batch['references'] );
+            $rows_read  = (int) $batch['rows'];
+            $skipped    = (int) $batch['skipped'];
+            $cursor     = (int) $batch['last_id'];
+            $all_done   = $rows_read < $batch_size;
+        }
+
         foreach ( $references as $ref ) {
             UNMAM_Database::insert_reference( $ref );
         }
 
-        UNMAM_Database::update_scan_progress( 'options', array(
-            'status'       => 'completed',
-            'completed_at' => current_time( 'mysql' ),
-        ) );
+        $progress_update = array(
+            'last_processed_id' => $cursor,
+            'status'            => $all_done ? 'completed' : 'running',
+            'completed_at'      => $all_done ? current_time( 'mysql' ) : null,
+        );
+
+        // Never let a skipped option be silent - it is the difference between "no media
+        // here" and "we did not look".
+        if ( $skipped > 0 ) {
+            $progress_update['error_log'] = sprintf(
+                /* translators: %d: number of options skipped for being too large */
+                __( '%d option(s) skipped for exceeding the size limit.', 'unattached-media-manager' ),
+                $skipped
+            );
+        }
+
+        UNMAM_Database::update_scan_progress( 'options', $progress_update );
 
         return array(
             'processed' => count( $references ),
-            'status'    => 'completed',
+            'status'    => $all_done ? 'completed' : 'running',
             'message'   => sprintf(
                 /* translators: %d: number of references found */
                 __( 'Found %d option references.', 'unattached-media-manager' ),
@@ -671,7 +729,7 @@ class UNMAM_Scanner {
         if ( ! empty( $settings['scan_post_types'] ) && is_array( $settings['scan_post_types'] ) ) {
             $types = array_map( 'sanitize_key', $settings['scan_post_types'] );
         } else {
-            $all      = get_post_types( array( 'public' => true ), 'names' );
+            $all      = unmam_get_scannable_post_type_candidates();
             $excluded = isset( $settings['excluded_post_types'] ) && is_array( $settings['excluded_post_types'] )
                 ? $settings['excluded_post_types']
                 : array( 'revision', 'nav_menu_item' );

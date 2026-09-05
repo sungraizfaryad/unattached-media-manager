@@ -253,7 +253,7 @@ class UNMAM_CLI_Commands {
         $table_data = array();
         foreach ( $references as $ref ) {
             $source_title = '';
-            if ( $ref['source_id'] > 0 ) {
+            if ( 'post' === $ref['source_type'] && $ref['source_id'] > 0 ) {
                 $source_title = get_the_title( $ref['source_id'] ) ?: sprintf( 'Post #%d', $ref['source_id'] );
             } else {
                 $source_title = $ref['context_key'];

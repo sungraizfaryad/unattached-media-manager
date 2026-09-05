@@ -34,19 +34,6 @@ class UNMAM_Options_Parser {
      *
      * @var array
      */
-    private $scan_patterns = array(
-        'theme_mods_%',      // Theme customizer settings
-        'options_%',         // ACF options pages
-        'widget_%',          // Widgets (handled separately but may have options)
-        '%_options',         // Plugin options
-        '%_settings',        // Plugin settings
-    );
-
-    /**
-     * Option patterns to skip
-     *
-     * @var array
-     */
     private $skip_patterns = array(
         '_transient%',
         '_site_transient%',
@@ -54,6 +41,10 @@ class UNMAM_Options_Parser {
         'rewrite_rules',
         'auto_core_update%',
         '_edit_lock',
+        'wp_user_roles',          // Capability map. Large, never media.
+        '_wp_session_%',          // Session payloads.
+        'action_scheduler_%',     // Job queues, can be enormous.
+        '%_transient_timeout_%',
     );
 
     /**
@@ -101,11 +92,77 @@ class UNMAM_Options_Parser {
             $references = array_merge( $references, $acf_refs );
         }
 
-        // Scan generic options that might contain media
-        $generic_refs = $this->parse_generic_options();
-        $references   = array_merge( $references, $generic_refs );
-
+        // The generic sweep over wp_options is paged separately by the scanner via
+        // parse_generic_options_batch(), so it is deliberately not run here.
         return $references;
+    }
+
+    /**
+     * Scan one page of wp_options for media references.
+     *
+     * Replaces the old name-pattern allow-list, which only looked at options called
+     * theme_mods_*, options_*, widget_*, *_options or *_settings and so missed anything
+     * stored under another name. It also replaces a hard LIMIT 1000 that silently stopped
+     * the sweep partway through on larger sites.
+     *
+     * @param int $after_id   Only read options with a higher option_id.
+     * @param int $limit      Maximum rows to read.
+     * @param int $size_limit Skip option_value larger than this many bytes.
+     * @return array {
+     *     @type array $references Reference rows found.
+     *     @type int   $rows       Options actually read.
+     *     @type int   $last_id    Highest option_id read, for the next cursor.
+     *     @type int   $skipped    Options skipped for being oversized.
+     * }
+     */
+    public function parse_generic_options_batch( $after_id, $limit, $size_limit = 1048576 ) {
+        global $wpdb;
+
+        $references = array();
+        $skipped    = 0;
+        $last_id    = (int) $after_id;
+
+        $exclude_clauses = array();
+        foreach ( $this->skip_patterns as $pattern ) {
+            $exclude_clauses[] = $wpdb->prepare( 'option_name NOT LIKE %s', $pattern );
+        }
+        $where = $exclude_clauses ? implode( ' AND ', $exclude_clauses ) : '1=1';
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Clauses are individually prepared above
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT option_id, option_name, option_value, LENGTH(option_value) AS value_bytes
+                 FROM {$wpdb->options}
+                 WHERE option_id > %d AND {$where}
+                 ORDER BY option_id ASC
+                 LIMIT %d",
+                (int) $after_id,
+                (int) $limit
+            )
+        );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+        foreach ( $rows as $row ) {
+            $last_id = (int) $row->option_id;
+
+            if ( (int) $row->value_bytes > $size_limit ) {
+                $skipped++;
+                continue;
+            }
+
+            $value = maybe_unserialize( $row->option_value );
+            $refs  = $this->check_value_for_media( $row->option_name, $value, 'option' );
+            if ( $refs ) {
+                $references = array_merge( $references, $refs );
+            }
+        }
+
+        return array(
+            'references' => $references,
+            'rows'       => count( $rows ),
+            'last_id'    => $last_id,
+            'skipped'    => $skipped,
+        );
     }
 
     /**
@@ -210,48 +267,6 @@ class UNMAM_Options_Parser {
     }
 
     /**
-     * Parse generic options
-     *
-     * @return array
-     */
-    private function parse_generic_options() {
-        global $wpdb;
-
-        $references = array();
-
-        // Build query to find potentially interesting options.
-        // All LIKE/NOT LIKE clauses below are individually prepared via $wpdb->prepare().
-        $include_clauses = array();
-        foreach ( $this->scan_patterns as $pattern ) {
-            $include_clauses[] = $wpdb->prepare( 'option_name LIKE %s', $pattern );
-        }
-
-        $exclude_clauses = array();
-        foreach ( $this->skip_patterns as $pattern ) {
-            $exclude_clauses[] = $wpdb->prepare( 'option_name NOT LIKE %s', $pattern );
-        }
-
-        $where = '1=1';
-        if ( ! empty( $include_clauses ) ) {
-            $where .= ' AND (' . implode( ' OR ', $include_clauses ) . ')';
-        }
-        if ( ! empty( $exclude_clauses ) ) {
-            $where .= ' AND ' . implode( ' AND ', $exclude_clauses );
-        }
-
-        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- All clauses are individually prepared above
-        $options = $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE {$where} LIMIT 1000" );
-
-        foreach ( $options as $opt ) {
-            $value = maybe_unserialize( $opt->option_value );
-            $refs  = $this->check_value_for_media( $opt->option_name, $value, 'option' );
-            $references = array_merge( $references, $refs );
-        }
-
-        return $references;
-    }
-
-    /**
      * Check value for media references
      *
      * @param string $option_name  Option name.
@@ -315,6 +330,19 @@ class UNMAM_Options_Parser {
 
             // Check URL keys
             if ( in_array( $key, $url_keys, true ) && is_string( $value ) && $this->looks_like_media_url( $value ) ) {
+                $attachment_id = UNMAM_Database::url_to_attachment_id( $value );
+                if ( $attachment_id ) {
+                    $references[] = $this->create_option_reference( $attachment_id, "{$option_name}[{$key}]", $context_type, 'url', $value );
+                }
+                continue;
+            }
+
+            // Any string pointing into the uploads folder is a media reference whatever the
+            // key is called. Plugins name these keys anything, so matching only a fixed list
+            // ('url', 'src', 'image'...) missed most of them. Note this catch-all is for URLs
+            // only: a bare number stays gated on the ID keys above, because treating every
+            // number as an attachment ID is how unrelated values become false references.
+            if ( is_string( $value ) && $this->looks_like_media_url( $value ) ) {
                 $attachment_id = UNMAM_Database::url_to_attachment_id( $value );
                 if ( $attachment_id ) {
                     $references[] = $this->create_option_reference( $attachment_id, "{$option_name}[{$key}]", $context_type, 'url', $value );
