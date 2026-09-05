@@ -221,10 +221,65 @@ class UNMAM_Admin {
     /**
      * Render admin page
      */
+    /**
+     * Warn when a post type holding content is not being scanned.
+     *
+     * The list of post types to scan used to be a snapshot taken once, so a post type
+     * registered later was silently never scanned and its media reported unused. That is
+     * repaired going forward, but an install already in that state cannot be fixed
+     * automatically: there is no way to tell "this was never offered" apart from "the admin
+     * turned this off deliberately". Rather than guess, say what is not being scanned and
+     * let the admin decide.
+     *
+     * @param string $current_tab Tab being rendered.
+     */
+    private function render_unscanned_post_types_notice( $current_tab ) {
+        if ( 'settings' === $current_tab ) {
+            return; // The setting itself is right there.
+        }
+
+        $settings = Unattached_Media_Manager::get_setting();
+        $scanned  = isset( $settings['scan_post_types'] ) && is_array( $settings['scan_post_types'] )
+            ? $settings['scan_post_types']
+            : array();
+
+        $missing = array();
+        foreach ( array_diff( unmam_get_scannable_post_type_candidates(), $scanned ) as $slug ) {
+            $counts = wp_count_posts( $slug );
+            if ( ! $counts || empty( $counts->publish ) ) {
+                continue; // Nothing in it, so nothing to miss.
+            }
+
+            $obj       = get_post_type_object( $slug );
+            $missing[] = ( $obj && ! empty( $obj->labels->name ) ) ? $obj->labels->name : $slug;
+        }
+
+        if ( ! $missing ) {
+            return;
+        }
+
+        printf(
+            '<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p>%3$s <a href="%4$s">%5$s</a></p></div>',
+            esc_html__( 'Some content is not being scanned.', 'unattached-media-manager' ),
+            esc_html(
+                sprintf(
+                    /* translators: %s: comma separated list of post type names */
+                    __( 'These post types contain content but are switched off in settings, so media used only there will be listed as unused: %s.', 'unattached-media-manager' ),
+                    implode( ', ', $missing )
+                )
+            ),
+            esc_html__( 'If that is not deliberate, switch them on and run a full scan before deleting anything.', 'unattached-media-manager' ),
+            esc_url( admin_url( 'admin.php?page=unattached-media-manager&tab=settings' ) ),
+            esc_html__( 'Open settings', 'unattached-media-manager' )
+        );
+    }
+
     public function render_admin_page() {
         // Determine current tab
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Tab navigation, no action taken
         $current_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'dashboard';
+
+        $this->render_unscanned_post_types_notice( $current_tab );
 
         // Handle settings save
         if ( 'settings' === $current_tab && isset( $_POST['unmam_save_settings'] ) && check_admin_referer( 'unmam_settings_nonce' ) ) {
