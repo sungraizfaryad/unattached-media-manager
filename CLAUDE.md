@@ -7,7 +7,7 @@
 - **PHP class prefix:** `UNMAM_` (constants `UNMAM_*`). Older identifiers `mui_*` / `mui-*` and `aioms_*` still exist on purpose — see mines.
 - **GitHub:** https://github.com/sungraizfaryad/unattached-media-manager
 - **WP.org:** https://wordpress.org/plugins/unattached-media-manager/
-- **Current release:** 1.2.0 (shipped 2026-09-05). 1.3.0 (terms scanning) is built on `feature/1.3.0-terms` but **not yet verified against FLP**. Do not deploy it as-is.
+- **Current release:** 1.3.0 (shipped 2026-09-07, SVN r3684996). 1.3.1 (WooCommerce variation downloads) is on `fix/1.3.1-woo-variation-downloads`, tested, not yet deployed.
 
 WordPress only marks media as "attached" when it was uploaded through the post editor. Anything added via ACF, Gutenberg blocks, page builders, widgets, theme options, shortcodes, SEO plugins, WooCommerce, or custom tables shows as "Unattached", which makes the native Unattached filter unreliable. This plugin scans the whole site for where media is actually used, attaches used files to their parent posts so the native filter works again, and surfaces genuinely unused media for safe cleanup (trash, restore, delete, with full history and revert).
 
@@ -72,6 +72,14 @@ rsync -a --delete \
 - **`url_to_attachment_id()` takes a second argument, `$allow_filename_fallback`.** Its last-resort filename match has no host check, so a URL on someone else's site that shares a basename with one of ours credits the wrong file. The ACF `url` / `link` / `oembed` / `icon_picker` fields pass `UNMAM_Database::url_points_at_this_site()` because they hold whatever URL an editor typed. Every other caller keeps the default `true`, which is the pre-1.3.0 behaviour. `url_points_at_this_site()` deliberately fails open: same host, no host, or an uploads path anywhere in the URL all count as ours, so CDNs and changed domains still resolve.
 - **That fix is partial, and knowingly so.** ACF stores a `link` field as a serialized array with a `url` key, and `UNMAM_Meta_Parser::parse_complex_value()` matches `url` keys with the fallback still enabled, so the same external URL is credited again through the `term_meta` / `postmeta` row. Closing that means gating the shared resolver for all post meta on every install, which is the under-reporting direction and needs its own release. `dev/fixture/acf-seed.php` asserts the ACF path is 0 and prints the meta path as a known bypass.
 - **Also accepted:** the generic meta parser treats a bare numeric meta value as an attachment ID whenever it resolves to a real attachment, on any key name. Pre-existing for postmeta, now reachable for term meta too. Gating it to a known-key allowlist would drop genuine references from the many plugins that use their own key names. See `dev/ROADMAP.md`.
+
+**WooCommerce**
+
+- **A variable product is not itself downloadable; its variations are.** `is_downloadable()` on the parent returns false, so a parent-only downloads check misses every file sold through a variation. That shipped from the start and was found by @galbaras in 1.3.1. `collect_downloads()` is shared by the parent and variation paths so they cannot drift again.
+- **Iterate variations with `get_children()`, never `get_available_variations()`.** The latter returns only purchasable, visible variations, so media on a disabled, hidden or out-of-stock variation looked unused. It also builds a full display array per variation, which is far more work than reading the ids.
+- `product_variation` is registered `public => false, show_ui => false`, so it is not a scannable post type and the generic meta parser never sees `_downloadable_files` on variations. The WooCommerce parser is the only thing that covers them.
+- Variation references are credited to the **parent product** id, so Where Used links somewhere editable.
+- Testing WooCommerce needs `wc_downloads_approved_directories_mode` set to `disabled`, or `set_downloads()` rejects any file outside an approved directory.
 
 **Non-post reference sources**
 

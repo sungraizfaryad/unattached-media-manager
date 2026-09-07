@@ -106,5 +106,6 @@ plainly in the changelog rather than overselling it.
 | Who | Issue | Status |
 |---|---|---|
 | @adeqx | Trashed media still rendering; restore was painful | Answered. Restore All, toolbar order and page size shipped in 1.2.0. **Not yet told that theme/CSS references are still unhandled**, which may be his actual cause. Tell him before he re-tests. |
+| @galbaras | WooCommerce variation downloads reported unused | Confirmed and fixed in 1.3.1. He supplied a reproduction snippet. Also fixed images on hidden/disabled variations, found while verifying. |
 | @galbaras | ACF fields on WooCommerce product categories | Diagnosis confirmed by him. He re-tested 1.2.0 against an SEO Macroscope crawl and found the unused list accurate, but still with the `wp_termmeta` workaround in place. 1.3.0 is built, not yet tested. Tell him when the entry can be removed. |
 | @kreativelabs | Bricks Builder templates not scanned | Diagnosed as the post-type snapshot plus `public`-only filtering, both fixed in 1.2.0. **Unverified**, he never confirmed. Ask whether 1.2.0 fixes it. |

@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -353,6 +353,14 @@ Your parser should implement the `UNMAM_Parser_Interface`.
 
 == Changelog ==
 
+= 1.3.1 =
+**Fixes files sold through WooCommerce product variations being reported as unused.**
+
+* **Downloadable files on product variations were never scanned.** The check ran against the parent product, and a variable product is not itself downloadable, so files attached to its variations were invisible and could appear in the Unused list. Files in `woocommerce_uploads` are the common case. Reported by @galbaras. Downloadable files on simple products were already handled and are unaffected.
+* **Images on hidden or disabled product variations were also missed**, because only purchasable, visible variations were being read. All variations are now scanned, whatever their status.
+
+If you sell downloadable products with variations, re-run a full scan after updating.
+
 = 1.3.0 =
 **Media attached to categories, tags and custom taxonomy terms is now found.**
 
@@ -464,6 +472,9 @@ This release is mostly about the accuracy of the Unused list, in both directions
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.3.1 =
+Files sold through WooCommerce product variations were not scanned and could be listed as unused, because the check only looked at the parent product. Images on hidden or disabled variations were missed too. Re-run a full scan if you sell downloadable products.
 
 = 1.3.0 =
 Media used on categories, tags and custom taxonomy terms, such as an ACF image field on a product category, was never scanned and was reported as unused. It is now found, and term scanning is on by default. Re-run a full scan after updating; your unused count may go down.
