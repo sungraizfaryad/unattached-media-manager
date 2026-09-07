@@ -250,6 +250,21 @@ class UNMAM_Attachment_Manager {
                 }
                 break;
 
+            case 'term_meta':
+            case 'term_acf':
+                $meta_value = get_term_meta( $ref['source_id'], $ref['context_key'], true );
+                if ( $meta_value ) {
+                    $new_meta = $this->replace_in_meta( $meta_value, $old_attachment_id, $new_attachment_id, $old_urls, $new_url );
+                    if ( $new_meta !== $meta_value ) {
+                        if ( ! $dry_run ) {
+                            update_term_meta( $ref['source_id'], $ref['context_key'], $new_meta );
+                        }
+                        $result['success'] = true;
+                        $result['action']  = 'updated_meta';
+                    }
+                }
+                break;
+
             case 'option':
                 $option_value = get_option( $ref['context_key'] );
                 if ( $option_value ) {

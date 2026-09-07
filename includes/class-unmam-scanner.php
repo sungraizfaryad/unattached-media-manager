@@ -166,6 +166,10 @@ class UNMAM_Scanner {
                 $result = $this->scan_widgets();
                 break;
 
+            case 'terms':
+                $result = $this->scan_terms_batch( $batch_size );
+                break;
+
             case 'custom_tables':
                 $result = $this->scan_custom_tables();
                 break;
@@ -397,6 +401,70 @@ class UNMAM_Scanner {
     }
 
     /**
+     * Index a single taxonomy term.
+     *
+     * @param int         $term_id  Term ID.
+     * @param string|null $taxonomy Taxonomy slug. Resolved via get_term() when omitted,
+     *                              since the term-meta hooks only pass the object id.
+     */
+    public function index_term( $term_id, $taxonomy = null ) {
+        $this->ensure_parsers_initialized();
+
+        if ( null === $taxonomy ) {
+            $term = get_term( $term_id );
+            if ( ! $term || is_wp_error( $term ) ) {
+                return;
+            }
+            $taxonomy = $term->taxonomy;
+        } else {
+            $term = get_term( $term_id, $taxonomy );
+            if ( ! $term || is_wp_error( $term ) ) {
+                return;
+            }
+        }
+
+        // The batch scan and the live reindex must agree on scope, or a scan deletes
+        // what a term save just created.
+        $settings = Unattached_Media_Manager::get_setting();
+        if ( ! in_array( $taxonomy, $this->get_allowed_taxonomies( $settings ), true ) ) {
+            return;
+        }
+
+        UNMAM_Database::delete_references_by_source_in_contexts(
+            $term_id,
+            'term',
+            array( 'term_meta', 'term_acf' )
+        );
+
+        $references = array();
+
+        foreach ( $this->parsers as $parser ) {
+            if ( ! $parser instanceof UNMAM_Term_Parser_Interface ) {
+                continue;
+            }
+
+            $parser_refs = $parser->parse_term( $term );
+            if ( ! empty( $parser_refs ) ) {
+                $references = array_merge( $references, $parser_refs );
+            }
+        }
+
+        foreach ( $references as $ref ) {
+            UNMAM_Database::insert_reference( $ref );
+        }
+
+        // A term is not a post - never auto-attach here.
+
+        /**
+         * Fires after a term is indexed
+         *
+         * @param int   $term_id    Term ID.
+         * @param array $references Found references.
+         */
+        do_action( 'unmam_term_indexed', $term_id, $references );
+    }
+
+    /**
      * Scan options table
      *
      * @return array
@@ -562,6 +630,130 @@ class UNMAM_Scanner {
     }
 
     /**
+     * Scan a batch of taxonomy terms.
+     *
+     * Known limit: a pre-WP-4.2 shared term_id present in two selected taxonomies can
+     * straddle a batch boundary and lose the second row. Split terms have been the
+     * default since 2015, so this is accepted rather than worked around.
+     *
+     * @param int $batch_size Number of terms to process.
+     * @return array
+     */
+    private function scan_terms_batch( $batch_size ) {
+        global $wpdb;
+
+        $progress = UNMAM_Database::get_scan_progress( 'terms' );
+        $cursor   = $progress ? (int) $progress['last_processed_id'] : 0;
+
+        // Same rewind rule as scan_options(): a finished step asked to run again means
+        // a new pass. Without it a rescan not started with --reset sweeps nothing, so
+        // an edited term keeps its old reference and the newly referenced file looks
+        // unused.
+        if ( $progress && 'completed' === $progress['status'] ) {
+            $cursor = 0;
+        }
+
+        $settings           = Unattached_Media_Manager::get_setting();
+        $allowed_taxonomies = $this->get_allowed_taxonomies( $settings );
+
+        if ( empty( $allowed_taxonomies ) ) {
+            UNMAM_Database::update_scan_progress( 'terms', array(
+                'status'       => 'completed',
+                'completed_at' => current_time( 'mysql' ),
+            ) );
+            return array(
+                'processed' => 0,
+                'status'    => 'completed',
+                'message'   => __( 'No taxonomies selected for scanning.', 'unattached-media-manager' ),
+            );
+        }
+
+        $placeholders = implode( ', ', array_fill( 0, count( $allowed_taxonomies ), '%s' ) );
+
+        if ( 0 === $cursor ) {
+            // Own rows only. Never a bare source_type = 'term' delete: the WooCommerce
+            // parser writes product category thumbnails as term/woocommerce rows during
+            // the options step, and those must survive a terms rescan.
+            UNMAM_Database::delete_references_by_source_and_context( 'term', 'term_meta' );
+            UNMAM_Database::delete_references_by_source_and_context( 'term', 'term_acf' );
+
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Dynamic IN clause
+            $total_items = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$wpdb->term_taxonomy}
+                    WHERE taxonomy IN ({$placeholders})",
+                    $allowed_taxonomies
+                )
+            );
+
+            UNMAM_Database::update_scan_progress( 'terms', array(
+                'total_items'     => $total_items,
+                'processed_items' => 0,
+                'started_at'      => current_time( 'mysql' ),
+            ) );
+        }
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Dynamic IN clause
+        $terms = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT t.term_id, tt.taxonomy
+                FROM {$wpdb->terms} t
+                INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_id = t.term_id
+                WHERE t.term_id > %d
+                AND tt.taxonomy IN ({$placeholders})
+                ORDER BY t.term_id ASC
+                LIMIT %d",
+                array_merge( array( $cursor ), $allowed_taxonomies, array( $batch_size ) )
+            )
+        );
+
+        if ( empty( $terms ) ) {
+            UNMAM_Database::update_scan_progress( 'terms', array(
+                'status'       => 'completed',
+                'completed_at' => current_time( 'mysql' ),
+            ) );
+            return array(
+                'processed' => 0,
+                'status'    => 'completed',
+                'message'   => __( 'Term scan completed.', 'unattached-media-manager' ),
+            );
+        }
+
+        $processed        = 0;
+        $resource_monitor = UNMAM_Resource_Monitor::instance();
+
+        foreach ( $terms as $term_row ) {
+            if ( $resource_monitor->should_pause() ) {
+                break;
+            }
+
+            $this->index_term( (int) $term_row->term_id, $term_row->taxonomy );
+            $processed++;
+            $cursor = (int) $term_row->term_id;
+        }
+
+        // A pass that just started (rewound or first-ever run) has already had its
+        // processed_items zeroed above; anything else carries the running total forward.
+        $processed_base = ( $progress && 'completed' !== $progress['status'] ) ? (int) $progress['processed_items'] : 0;
+
+        UNMAM_Database::update_scan_progress( 'terms', array(
+            'last_processed_id' => $cursor,
+            'processed_items'   => $processed_base + $processed,
+            'status'            => 'running',
+        ) );
+
+        return array(
+            'processed' => $processed,
+            'status'    => 'running',
+            'message'   => sprintf(
+                /* translators: %d: number of terms processed */
+                __( 'Processed %d terms.', 'unattached-media-manager' ),
+                $processed
+            ),
+        );
+    }
+
+    /**
      * Scan admin-configured custom database tables.
      *
      * Cursor-paginated across all configured table/column entries. Stores
@@ -669,15 +861,20 @@ class UNMAM_Scanner {
      * Get the ordered list of active scan types.
      *
      * Single source of truth for the scan pipeline. The historical
-     * posts/options/widgets sequence always runs. 'custom_tables' is appended
-     * only when the admin has configured at least one table/column entry, so
-     * installs that never opt in behave exactly as before.
+     * posts/options/widgets sequence always runs. 'terms' is appended only
+     * when at least one taxonomy is selected, and 'custom_tables' only when
+     * the admin has configured at least one table/column entry, so installs
+     * that never opt in behave exactly as before.
      *
      * @return string[]
      */
     public static function get_active_scan_types() {
         $types    = array( 'posts', 'options', 'widgets' );
         $settings = Unattached_Media_Manager::get_setting();
+
+        if ( ! empty( $settings['scan_taxonomies'] ) && is_array( $settings['scan_taxonomies'] ) ) {
+            $types[] = 'terms';
+        }
 
         if ( ! empty( $settings['scan_custom_tables'] ) && is_array( $settings['scan_custom_tables'] ) ) {
             $types[] = 'custom_tables';
@@ -781,26 +978,43 @@ class UNMAM_Scanner {
     }
 
     /**
+     * Resolve the taxonomies the scanner should query.
+     *
+     * Stored slugs are sanitized and intersected with the current candidate
+     * list, so a taxonomy that was selected and later deregistered cannot
+     * reach the SQL IN clause.
+     *
+     * @param array $settings
+     * @return string[]
+     */
+    private function get_allowed_taxonomies( $settings ) {
+        $slugs = ( ! empty( $settings['scan_taxonomies'] ) && is_array( $settings['scan_taxonomies'] ) )
+            ? array_map( 'sanitize_key', $settings['scan_taxonomies'] )
+            : array();
+
+        $candidates = unmam_get_scannable_taxonomy_candidates();
+        $types      = array_values( array_intersect( $slugs, $candidates ) );
+
+        /**
+         * Filter the taxonomies the scanner queries.
+         *
+         * @since 1.3.0
+         * @param string[] $types Taxonomy slugs.
+         */
+        return apply_filters( 'unmam_scan_taxonomies', $types );
+    }
+
+    /**
      * Get overall scan status
      *
      * @return array
      */
     public function get_scan_status() {
-        $posts_progress   = UNMAM_Database::get_scan_progress( 'posts' );
-        $options_progress = UNMAM_Database::get_scan_progress( 'options' );
-        $widgets_progress = UNMAM_Database::get_scan_progress( 'widgets' );
-
-        $status = array(
-            'posts'   => $posts_progress,
-            'options' => $options_progress,
-            'widgets' => $widgets_progress,
-        );
-
-        // Only surface custom_tables progress when the step is active, so the
-        // payload and completion math are identical to prior versions otherwise.
         $active_types = self::get_active_scan_types();
-        if ( in_array( 'custom_tables', $active_types, true ) ) {
-            $status['custom_tables'] = UNMAM_Database::get_scan_progress( 'custom_tables' );
+
+        $status = array();
+        foreach ( $active_types as $type ) {
+            $status[ $type ] = UNMAM_Database::get_scan_progress( $type );
         }
 
         $status['overall'] = $this->calculate_overall_progress( $status, $active_types );

@@ -7,7 +7,7 @@
 - **PHP class prefix:** `UNMAM_` (constants `UNMAM_*`). Older identifiers `mui_*` / `mui-*` and `aioms_*` still exist on purpose — see mines.
 - **GitHub:** https://github.com/sungraizfaryad/unattached-media-manager
 - **WP.org:** https://wordpress.org/plugins/unattached-media-manager/
-- **Current release:** 1.2.0 (shipped 2026-09-05).
+- **Current release:** 1.2.0 (shipped 2026-09-05). 1.3.0 (terms scanning) is built on `feature/1.3.0-terms` but **not yet verified against FLP**. Do not deploy it as-is.
 
 WordPress only marks media as "attached" when it was uploaded through the post editor. Anything added via ACF, Gutenberg blocks, page builders, widgets, theme options, shortcodes, SEO plugins, WooCommerce, or custom tables shows as "Unattached", which makes the native Unattached filter unreliable. This plugin scans the whole site for where media is actually used, attaches used files to their parent posts so the native filter works again, and surfaces genuinely unused media for safe cleanup (trash, restore, delete, with full history and revert).
 
@@ -47,7 +47,7 @@ rsync -a --delete \
 - **A multi-batch step must return `running` until genuinely done.** Both the CLI loop and `process_batch()` only advance when a step reports `completed`.
 - **A resumable step must rewind when re-entered.** `scan_options()` rewinds its cursor when the stored status is already `completed`. Without that, a rescan not started with a reset sweeps nothing at all, an option edited to point at a different image is never re-read, the old reference lingers so that file still looks used, and the newly referenced file looks unused. This shipped broken briefly during 1.2.0 development and was caught in review.
 - **`index_options()` must loop to completion.** It is the "this changed, recheck it now" entry point used on ACF options saves. Its first batch clears the previous option references, so stopping after one batch drops references held further down `wp_options`.
-- **Three lists of scan types are still hardcoded** and drift: `wp unmam status` (`class-unmam-cli-commands.php:616`), the REST `/scan/batch` `enum` (`class-unmam-rest-controller.php:108`) and `UNMAM_Scanner::get_scan_status()`. The first two are already missing `custom_tables`, so a REST caller cannot run that step at all. Update all three when adding a type, or point them at `get_active_scan_types()`.
+- **The three hardcoded scan-type lists are gone as of 1.3.0.** `wp unmam status`, the REST `/scan/batch` `enum` and `UNMAM_Scanner::get_scan_status()` all read `get_active_scan_types()` now. Keep it that way; each had already drifted and was missing `custom_tables`, so a REST caller could not run that step at all.
 
 **Reference correctness**
 
@@ -55,6 +55,23 @@ rsync -a --delete \
 - **IDs lifted out of markup are untrusted.** `wp-image-{ID}` classes and `data-id` attributes survive content being copied between sites. Validate, then fall through to resolving the `src` URL rather than giving up.
 - **Filename matching must be anchored to a path boundary.** `url_to_attachment_id()`'s fallback once matched any `_wp_attached_file` *ending* in the filename, so `A.png` matched `termmeta.png` and credited the wrong attachment. It now matches the whole basename. Keep the CDN and changed-domain cases working.
 - **Only URLs may be matched on an arbitrary key name.** Numeric IDs stay gated on known key names. A URL into uploads is unambiguous; a bare number is not.
+
+**Terms (1.3.0)**
+
+- **Term rows must use `context_type` `term_meta` or `term_acf`, never `postmeta` or `acf`.** `replace_single_reference()` branches on `context_type` alone, so reusing the post strings makes it call `get_post_meta()` / `update_post_meta()` with a term id as the post id.
+- **Never delete term rows on `source_type = 'term'` alone.** The WooCommerce parser writes category thumbnails as `term` / `woocommerce` during the options step. The batch reset clears each context separately with `delete_references_by_source_and_context()`, and `index_term()` uses `delete_references_by_source_in_contexts()`. Both are scoped deliberately.
+- **`index_term()` bails when the taxonomy is not selected**, mirroring `index_post()`. Without that guard a batch scan deletes what a term save just created.
+- **`scan_taxonomies` is on by default**, seeded for fresh installs and on upgrade. `scan_taxonomies_known` follows the `scan_post_types_known` rule exactly: seed it from the current candidate set, never from the admin's selection.
+- **Terms are never auto-attached.** A term is not a post.
+- Known limit: a pre-4.2 shared `term_id` present in two selected taxonomies can straddle a batch boundary and lose the second row. Accepted; split terms have been the default since 2015.
+
+**Reference extraction**
+
+- **`UNMAM_Reference_Extractor` is the only copy of the "find media in a text blob" regex.** The custom-table parser, the meta parser's last-resort branch and the ACF text-field bucket all call it, and 1.4.0's filesystem scan should too. Do not write a fourth copy.
+- **`UNMAM_Meta_Parser::looks_like_media_url()` returns true for any string merely containing `/wp-content/uploads/`**, including a whole blob of markup, which `url_to_attachment_id()` cannot resolve. So the URL branch only returns early when it actually produced a reference; otherwise it falls through to the extractor. Restoring the unconditional return makes every WYSIWYG value held in meta silently unscannable. This was caught in review, not in testing.
+- **`url_to_attachment_id()` takes a second argument, `$allow_filename_fallback`.** Its last-resort filename match has no host check, so a URL on someone else's site that shares a basename with one of ours credits the wrong file. The ACF `url` / `link` / `oembed` / `icon_picker` fields pass `UNMAM_Database::url_points_at_this_site()` because they hold whatever URL an editor typed. Every other caller keeps the default `true`, which is the pre-1.3.0 behaviour. `url_points_at_this_site()` deliberately fails open: same host, no host, or an uploads path anywhere in the URL all count as ours, so CDNs and changed domains still resolve.
+- **That fix is partial, and knowingly so.** ACF stores a `link` field as a serialized array with a `url` key, and `UNMAM_Meta_Parser::parse_complex_value()` matches `url` keys with the fallback still enabled, so the same external URL is credited again through the `term_meta` / `postmeta` row. Closing that means gating the shared resolver for all post meta on every install, which is the under-reporting direction and needs its own release. `dev/fixture/acf-seed.php` asserts the ACF path is 0 and prints the meta path as a known bypass.
+- **Also accepted:** the generic meta parser treats a bare numeric meta value as an attachment ID whenever it resolves to a real attachment, on any key name. Pre-existing for postmeta, now reachable for term meta too. Gating it to a known-key allowlist would drop genuine references from the many plugins that use their own key names. See `dev/ROADMAP.md`.
 
 **Non-post reference sources**
 
@@ -81,12 +98,15 @@ Core (`includes/`):
 - `class-unmam-attachment-manager.php` — attach/detach, reference replacement, delete guards.
 - `class-unmam-history.php` — change log with one-click revert.
 - `class-unmam-resource-monitor.php` — adaptive batch sizing.
+- `class-unmam-reference-extractor.php` — the single copy of media-in-text extraction (`wp-image-{ID}` classes and upload URLs) plus the `looks_extractable()` pre-filter.
 
 Admin (`includes/admin/`): `class-unmam-admin.php` (5 tabs plus the settings save handler and the unscanned-post-types notice), `class-unmam-bulk-actions.php`, `class-unmam-media-modal.php`.
 
 API/CLI: `includes/api/class-unmam-rest-controller.php` (namespace `unmam/v1`, and its `/scan/batch` endpoint has its own hardcoded scan-type enum), `includes/cli/class-unmam-cli-commands.php` (`wp unmam ...`).
 
 Parsers (`includes/parsers/`): content, block, acf, meta, options, widget, elementor, metabox, woocommerce, seo, custom-table.
+
+Two also implement `UNMAM_Term_Parser_Interface` (`parse_term`), and `index_term()` calls only those: `UNMAM_Meta_Parser` for raw term meta and `UNMAM_ACF_Parser` for ACF fields on terms. It is a separate interface rather than a change to the existing one, so third-party parsers registered through the `unmam_parsers` filter keep working.
 
 Eight implement `UNMAM_Parser_Interface` (`parse_post`, `get_name`) and are called per post by `index_post()`. **Three deliberately do not**, because they are not per-post, and a new one should only implement the interface if it really is:
 

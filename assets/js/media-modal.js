@@ -122,10 +122,10 @@
                     html += '<li class="mui-modal-ref">';
                     html += '<span class="mui-ref-badge">' + self.escapeHtml(ref.context_label || ref.context_type) + '</span>';
 
-                    if (ref.source_type === 'post' && ref.source_id > 0) {
-                        html += '<span class="mui-ref-title">' + self.escapeHtml(ref.source_title || 'Post #' + ref.source_id) + '</span>';
+                    if (ref.source_title) {
+                        html += '<span class="mui-ref-title">' + self.escapeHtml(ref.source_title) + '</span>';
                         if (ref.edit_link) {
-                            html += '<a href="' + ref.edit_link + '" target="_blank" class="mui-ref-link">' + unmamMediaModal.strings.edit + '</a>';
+                            html += '<a href="' + self.escapeHtml(ref.edit_link) + '" target="_blank" class="mui-ref-link">' + unmamMediaModal.strings.edit + '</a>';
                         }
                     } else {
                         html += '<span class="mui-ref-title">' + self.escapeHtml(ref.context_key) + '</span>';

@@ -106,7 +106,7 @@ class UNMAM_REST_Controller extends WP_REST_Controller {
                 'args'                => array(
                     'type' => array(
                         'default' => 'posts',
-                        'enum'    => array( 'posts', 'options', 'widgets' ),
+                        'enum'    => UNMAM_Scanner::get_active_scan_types(),
                     ),
                 ),
             ),
@@ -274,11 +274,12 @@ class UNMAM_REST_Controller extends WP_REST_Controller {
 
         $total = UNMAM_Database::get_reference_count( $attachment_id );
 
-        // Enrich with post titles
+        // Enrich with source details
         foreach ( $references as &$ref ) {
-            if ( 'post' === $ref['source_type'] && $ref['source_id'] > 0 ) {
-                $ref['source_title'] = get_the_title( $ref['source_id'] );
-                $ref['edit_url']     = get_edit_post_link( $ref['source_id'], 'raw' );
+            $source = UNMAM_Database::describe_source( $ref );
+            if ( $source ) {
+                $ref['source_title'] = $source['title'];
+                $ref['edit_url']     = $source['edit_link'];
             }
         }
 

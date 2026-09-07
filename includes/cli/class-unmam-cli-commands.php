@@ -253,12 +253,8 @@ class UNMAM_CLI_Commands {
 
         $table_data = array();
         foreach ( $references as $ref ) {
-            $source_title = '';
-            if ( 'post' === $ref['source_type'] && $ref['source_id'] > 0 ) {
-                $source_title = get_the_title( $ref['source_id'] ) ?: sprintf( 'Post #%d', $ref['source_id'] );
-            } else {
-                $source_title = $ref['context_key'];
-            }
+            $source       = UNMAM_Database::describe_source( $ref );
+            $source_title = $source ? $source['title'] : $ref['context_key'];
 
             $table_data[] = array(
                 'Source ID'    => $ref['source_id'],
@@ -613,7 +609,7 @@ class UNMAM_CLI_Commands {
         WP_CLI::log( sprintf( 'Status: %s', ucfirst( $overall['status'] ) ) );
         WP_CLI::log( '' );
 
-        $types = array( 'posts', 'options', 'widgets' );
+        $types = UNMAM_Scanner::get_active_scan_types();
         foreach ( $types as $type ) {
             if ( isset( $status[ $type ] ) ) {
                 $s = $status[ $type ];

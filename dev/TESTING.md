@@ -9,7 +9,30 @@ rebuilt from scratch each time.
 ## Test site
 
 FLP (`~/Local Sites/flp/`) is the site used. It is a real site with ~510 attachments, ~8000
-posts, Meta Box, ACF and Yoast active, which is far more useful than an empty install.
+posts, Meta Box (bundled inside easy-real-estate) and Yoast active, which is far more useful
+than an empty install.
+
+**ACF is NOT installed on FLP**, despite what older notes said. The ACF code paths have to be
+tested by copying ACF Pro in from another Local site for the run:
+
+```bash
+cp -R ~/Local\ Sites/kka/app/public/wp-content/plugins/advanced-custom-fields-pro \
+      ~/Local\ Sites/flp/app/public/wp-content/plugins/
+cp dev/fixture/unmam-acf-harness.php ~/Local\ Sites/flp/app/public/wp-content/mu-plugins/
+dev/flpwp.sh plugin activate advanced-custom-fields-pro
+dev/flpwp.sh eval-file dev/fixture/acf-seed.php     # expects 0 failures
+dev/flpwp.sh plugin deactivate advanced-custom-fields-pro
+dev/flpwp.sh plugin delete advanced-custom-fields-pro
+rm ~/Local\ Sites/flp/app/public/wp-content/mu-plugins/unmam-acf-harness.php
+```
+
+ACF leaves four options behind (`acf_first_activated_version`, `acf_site_health` and two
+update transients). Delete them after removing the plugin. Registering the field groups locally
+means there is nothing in `wp_posts` to clean up.
+
+`acf-seed.php` covers every media-bearing field type plus two URL cases that must not regress:
+a link to an external file sharing a basename with one of ours (must not be credited through
+the ACF path) and one of our files served from a CDN host (must still resolve).
 
 **Never touch its real media.** Create throwaway attachments with a recognisable prefix and
 delete them afterwards.
@@ -46,9 +69,17 @@ dev/flpwp.sh eval-file dev/fixture/teardown.php
 rm ~/Local\ Sites/flp/app/public/wp-content/mu-plugins/unmam-test-harness.php
 ```
 
-As of 1.2.0, `check.php` should show 3 of 7 detected. The 4 still undetected are the
-3 term cases (1.3.0) and the theme CSS case (1.4.0). If a case that used to pass starts
-failing, that is a regression.
+As of 1.2.0, `check.php` shows 3 of 7 detected. The 4 undetected are the 3 term cases and the
+theme CSS case.
+
+**As of 1.3.0 it should show 6 of 7.** `termmeta`, `termwysiwyg` and `termthumb` must all pass
+with ACF absent, because the generic meta parser reads raw term meta and its last-resort
+branch reads the WYSIWYG markup. Only `themecss` stays undetected until 1.4.0. If a case that
+used to pass starts failing, that is a regression.
+
+The fixture taxonomy `unmam_tax` is registered by the harness mu-plugin *after* settings were
+first stored, so it also exercises the taxonomy reconciliation: it must be scanned without
+anyone opening the Settings page.
 
 ## Admin UI without a browser
 
@@ -82,6 +113,19 @@ was verified end to end; the nonce is in the `unmamAdmin` object in the page sou
   options cursor bug lived.
 - `EMPTY_TRASH_DAYS=0` must still refuse to trash. Pass it with wp-cli's `--exec` flag
   rather than editing `wp-config.php`.
+- **Terms specifically, for 1.3.0:**
+  - Rescan without `--reset` after changing a term meta value. The old reference must go and
+    the new one must appear. This is the cursor-rewind rule.
+  - `wp term meta update`, then run the scheduled event, then confirm the reference row. Then
+    `wp term delete` and confirm the rows are gone.
+  - Settings: untick a taxonomy, save, read the settings back several times. It must stay
+    unticked. Then register a new taxonomy and confirm it is added automatically.
+  - Parity with the workaround @galbaras is running: scan once with `wp_termmeta.meta_value`
+    configured as a custom table, once with the native terms step, and diff the reference
+    rows by attachment. The native step must credit every attachment the workaround credited.
+  - Confirm the WooCommerce category-thumbnail rows (`source_type` `term`, `context_type`
+    `woocommerce`) survive a terms scan, in both step orders.
+  - `wp unmam usage <id>` on a term-only attachment must name the term, not a post.
 - WordPress.org Plugin Check, compared against the previous release rather than read as an
   absolute. Install the previous tag as a second plugin folder and diff the error counts.
   4 pre-existing `NotPrepared` errors are expected: 3 in `get_unused_attachments_detailed()`

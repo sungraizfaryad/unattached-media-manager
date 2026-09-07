@@ -135,20 +135,18 @@ class UNMAM_Media_Modal {
 
             <?php if ( ! empty( $references ) ) : ?>
             <ul class="mui-reference-list">
-                <?php foreach ( $references as $ref ) : ?>
+                <?php foreach ( $references as $ref ) :
+                    $source = UNMAM_Database::describe_source( $ref );
+                ?>
                 <li class="mui-reference-item">
                     <span class="mui-ref-context"><?php echo esc_html( $ref['context_label'] ); ?></span>
-                    <?php if ( 'post' === $ref['source_type'] && $ref['source_id'] > 0 ) : ?>
-                        <span class="mui-ref-source">
-                            <?php
-                            $source_title = get_the_title( $ref['source_id'] );
-                            /* translators: %d: post ID */
-                            echo esc_html( $source_title ?: sprintf( __( 'Post #%d', 'unattached-media-manager' ), $ref['source_id'] ) );
-                            ?>
-                        </span>
-                        <a href="<?php echo esc_url( get_edit_post_link( $ref['source_id'] ) ); ?>" class="mui-ref-edit" target="_blank">
+                    <?php if ( $source ) : ?>
+                        <span class="mui-ref-source"><?php echo esc_html( $source['title'] ); ?></span>
+                        <?php if ( ! empty( $source['edit_link'] ) ) : ?>
+                        <a href="<?php echo esc_url( $source['edit_link'] ); ?>" class="mui-ref-edit" target="_blank">
                             <?php esc_html_e( 'Edit', 'unattached-media-manager' ); ?>
                         </a>
+                        <?php endif; ?>
                     <?php else : ?>
                         <span class="mui-ref-source"><?php echo esc_html( $ref['context_key'] ); ?></span>
                     <?php endif; ?>
@@ -250,13 +248,13 @@ class UNMAM_Media_Modal {
         $total_count = UNMAM_Database::get_reference_count( $attachment_id );
         $is_safe     = UNMAM_Attachment_Manager::instance()->is_marked_safe( $attachment_id );
 
-        // Enrich references with titles
+        // Enrich references with source details
         foreach ( $references as &$ref ) {
-            if ( 'post' === $ref['source_type'] && $ref['source_id'] > 0 ) {
-                /* translators: %d: post ID */
-                $ref['source_title'] = get_the_title( $ref['source_id'] ) ?: sprintf( __( 'Post #%d', 'unattached-media-manager' ), $ref['source_id'] );
-                $ref['edit_link']    = get_edit_post_link( $ref['source_id'] );
-                $ref['view_link']    = get_permalink( $ref['source_id'] );
+            $source = UNMAM_Database::describe_source( $ref );
+            if ( $source ) {
+                $ref['source_title'] = $source['title'];
+                $ref['edit_link']    = $source['edit_link'];
+                $ref['view_link']    = $source['view_link'];
             }
         }
 
