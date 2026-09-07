@@ -4,7 +4,7 @@
  * Plugin Name: Unattached Media Manager
  * Plugin URI: https://wordpress.org/plugins/unattached-media-manager/
  * Description: Fix the WordPress Unattached media filter. Automatically attach used media files to their posts so you can safely clean up your library.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author: Sungraiz Faryad
@@ -76,8 +76,39 @@ function unmam_get_scannable_post_type_candidates()
     return array_values(apply_filters('unmam_scannable_post_types', array_diff($types, $excluded)));
 }
 
+/**
+ * Taxonomies that may be offered for scanning.
+ *
+ * Same union-of-two-queries shape as unmam_get_scannable_post_type_candidates(): public
+ * taxonomies plus anything with an admin UI, since a custom taxonomy can hold term meta
+ * without being public. post_format has no meta UI and never holds media; link_category
+ * belongs to the legacy Links manager and holds none either.
+ *
+ * @return string[] Taxonomy slugs.
+ */
+function unmam_get_scannable_taxonomy_candidates()
+{
+    $taxonomies = array_unique(array_merge(
+        get_taxonomies(array('public' => true), 'names'),
+        get_taxonomies(array('show_ui' => true), 'names')
+    ));
+
+    $excluded = array(
+        'post_format',
+        'link_category',
+    );
+
+    /**
+     * Filter the taxonomies the plugin will consider scanning at all.
+     *
+     * @since 1.3.0
+     * @param string[] $taxonomies Candidate taxonomy slugs.
+     */
+    return array_values(apply_filters('unmam_scannable_taxonomies', array_diff($taxonomies, $excluded)));
+}
+
 // Plugin constants
-define('UNMAM_VERSION', '1.2.0');
+define('UNMAM_VERSION', '1.3.0');
 define('UNMAM_PLUGIN_FILE', __FILE__);
 define('UNMAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('UNMAM_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -191,6 +222,7 @@ final class Unattached_Media_Manager
         // Core classes
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-history.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-database.php';
+        require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-reference-extractor.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-resource-monitor.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-scanner.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-attachment-manager.php';
@@ -199,6 +231,7 @@ final class Unattached_Media_Manager
 
         // Parsers
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-parser-interface.php';
+        require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-term-parser-interface.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-content-parser.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-block-parser.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-acf-parser.php';
@@ -239,6 +272,7 @@ final class Unattached_Media_Manager
         // Background processing
         add_action('unmam_background_scan', array($this, 'run_background_scan'));
         add_action('unmam_index_single_post', array($this, 'index_single_post'), 10, 1);
+        add_action('unmam_index_single_term', array($this, 'index_single_term'), 10, 2);
 
         // Real-time indexing hooks
         add_action('save_post', array($this, 'on_post_save'), 20, 2);
@@ -248,6 +282,14 @@ final class Unattached_Media_Manager
         add_action('updated_post_meta', array($this, 'on_meta_update'), 10, 4);
         add_action('added_post_meta', array($this, 'on_meta_add'), 10, 4);
         add_action('deleted_post_meta', array($this, 'on_meta_delete'), 10, 4);
+
+        // Term indexing hooks, parity with the post hooks above
+        add_action('created_term', array($this, 'on_term_save'), 10, 3);
+        add_action('edited_term', array($this, 'on_term_save'), 10, 3);
+        add_action('added_term_meta', array($this, 'on_term_meta_update'), 10, 4);
+        add_action('updated_term_meta', array($this, 'on_term_meta_update'), 10, 4);
+        add_action('deleted_term_meta', array($this, 'on_term_meta_update'), 10, 4);
+        add_action('delete_term', array($this, 'on_term_delete'), 10, 3);
 
         // ACF specific hooks
         add_action('acf/save_post', array($this, 'on_acf_save'), 20);
@@ -306,6 +348,18 @@ final class Unattached_Media_Manager
     {
         $scanner = UNMAM_Scanner::instance();
         $scanner->index_post($post_id);
+    }
+
+    /**
+     * Index a single term
+     *
+     * @param int         $term_id  Term ID.
+     * @param string|null $taxonomy Taxonomy slug, resolved from the term when omitted.
+     */
+    public function index_single_term($term_id, $taxonomy = null)
+    {
+        $scanner = UNMAM_Scanner::instance();
+        $scanner->index_term($term_id, $taxonomy);
     }
 
     /**
@@ -405,12 +459,63 @@ final class Unattached_Media_Manager
     }
 
     /**
+     * Handle term creation and edits
+     *
+     * @param int    $term_id  Term ID.
+     * @param int    $tt_id    Term taxonomy ID.
+     * @param string $taxonomy Taxonomy slug.
+     */
+    public function on_term_save($term_id, $tt_id, $taxonomy)
+    {
+        wp_schedule_single_event(time() + 5, 'unmam_index_single_term', array($term_id, $taxonomy));
+    }
+
+    /**
+     * Handle term deletion
+     *
+     * @param int    $term_id  Term ID.
+     * @param int    $tt_id    Term taxonomy ID.
+     * @param string $taxonomy Taxonomy slug.
+     */
+    public function on_term_delete($term_id, $tt_id, $taxonomy)
+    {
+        // The term itself is gone, so every context (including the WooCommerce
+        // category-thumbnail row) should go with it.
+        UNMAM_Database::delete_references_by_source($term_id, 'term');
+    }
+
+    /**
+     * Handle term meta add/update/delete
+     *
+     * @param int|array $meta_id    Meta ID (or IDs, on delete).
+     * @param int       $object_id  Term ID.
+     * @param string    $meta_key   Meta key.
+     * @param mixed     $meta_value Meta value.
+     */
+    public function on_term_meta_update($meta_id, $object_id, $meta_key, $meta_value)
+    {
+        // Skip internal meta
+        if (strpos($meta_key, '_unmam_') === 0) {
+            return;
+        }
+
+        // Taxonomy isn't known here; index_term() resolves it from the term.
+        wp_schedule_single_event(time() + 5, 'unmam_index_single_term', array($object_id));
+    }
+
+    /**
      * Handle ACF save
      *
-     * @param int $post_id Post ID.
+     * @param int|string $post_id Post ID, or a non-post ACF context like 'options' or 'term_123'.
      */
     public function on_acf_save($post_id)
     {
+        // ACF passes 'term_123' for a term save.
+        if (is_string($post_id) && strpos($post_id, 'term_') === 0) {
+            wp_schedule_single_event(time() + 5, 'unmam_index_single_term', array((int) substr($post_id, 5)));
+            return;
+        }
+
         // ACF uses options for some fields
         if ($post_id === 'options' || strpos((string) $post_id, 'options') !== false) {
             $scanner = UNMAM_Scanner::instance();
@@ -467,6 +572,38 @@ final class Unattached_Media_Manager
             if ($newly_seen || ! isset($settings['scan_post_types_known'])) {
                 $settings['scan_post_types']       = array_values(array_unique(array_merge($settings['scan_post_types'], $newly_seen)));
                 $settings['scan_post_types_known'] = array_values(array_unique(array_merge($known, $candidates)));
+                update_option('unmam_settings', $settings);
+            }
+        }
+
+        // Lazy migration: 1.3.0 introduced scan_taxonomies. Terms scanning is on by
+        // default, for fresh installs and for sites upgrading in place, so this seeds
+        // the full candidate set rather than leaving the feature off until the admin
+        // opts in.
+        if (is_array($settings) && ! isset($settings['scan_taxonomies'])) {
+            $settings['scan_taxonomies'] = unmam_get_scannable_taxonomy_candidates();
+            update_option('unmam_settings', $settings);
+        }
+
+        // Same reconciliation as scan_post_types above, for taxonomies registered
+        // after this setting was first stored.
+        if (is_array($settings) && isset($settings['scan_taxonomies'])) {
+            $tax_candidates = unmam_get_scannable_taxonomy_candidates();
+
+            if (isset($settings['scan_taxonomies_known']) && is_array($settings['scan_taxonomies_known'])) {
+                $tax_known      = $settings['scan_taxonomies_known'];
+                $tax_newly_seen = array_values(array_diff($tax_candidates, $tax_known));
+            } else {
+                // First run after upgrading: seed known with the current candidate set,
+                // never with the admin's selection, or every deliberately unticked
+                // taxonomy reads as brand new and switches back on.
+                $tax_known      = $tax_candidates;
+                $tax_newly_seen = array();
+            }
+
+            if ($tax_newly_seen || ! isset($settings['scan_taxonomies_known'])) {
+                $settings['scan_taxonomies']       = array_values(array_unique(array_merge($settings['scan_taxonomies'], $tax_newly_seen)));
+                $settings['scan_taxonomies_known'] = array_values(array_unique(array_merge($tax_known, $tax_candidates)));
                 update_option('unmam_settings', $settings);
             }
         }

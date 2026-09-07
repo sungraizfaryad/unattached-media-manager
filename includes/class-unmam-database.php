@@ -383,6 +383,106 @@ class UNMAM_Database {
     }
 
     /**
+     * Delete references for one source, limited to a set of context types.
+     *
+     * index_term() re-indexes a single term on every save and must clear only what the
+     * terms step itself wrote (term_meta, term_acf) for that term_id. The WooCommerce
+     * parser writes category thumbnails as source_type 'term' too, during the options step,
+     * so a plain source_id + source_type delete would take that row along with it. Returns
+     * 0 without querying when $context_types is empty, so an empty array can never widen
+     * into "delete everything for this source".
+     *
+     * @param int    $source_id     Source ID.
+     * @param string $source_type   Source type.
+     * @param array  $context_types Context types to match.
+     * @return int Number of rows deleted.
+     */
+    public static function delete_references_by_source_in_contexts( $source_id, $source_type, $context_types ) {
+        global $wpdb;
+
+        $context_types = (array) $context_types;
+
+        if ( empty( $context_types ) ) {
+            return 0;
+        }
+
+        $table        = self::get_table_name( 'references' );
+        $placeholders = implode( ', ', array_fill( 0, count( $context_types ), '%s' ) );
+
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Dynamic IN clause
+        return (int) $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$table} WHERE source_id = %d AND source_type = %s AND context_type IN ({$placeholders})",
+                array_merge( array( $source_id, $source_type ), $context_types )
+            )
+        );
+    }
+
+    /**
+     * Turn a reference row into what a "Where Used" display needs: a title and links.
+     *
+     * Centralises what five callers (the media modal, the REST controller, the WP-CLI
+     * usage command) used to duplicate for source_type 'post'. Callers escape the
+     * returned strings themselves; nothing here is pre-escaped.
+     *
+     * @param array $ref Reference row, needs at least source_id and source_type.
+     * @return array|null array( 'title', 'edit_link', 'view_link' ), or null when the
+     *                     source can't be resolved or isn't a type this knows about.
+     */
+    public static function describe_source( $ref ) {
+        $source_id   = isset( $ref['source_id'] ) ? (int) $ref['source_id'] : 0;
+        $source_type = isset( $ref['source_type'] ) ? $ref['source_type'] : '';
+
+        if ( $source_id <= 0 ) {
+            return null;
+        }
+
+        if ( 'post' === $source_type ) {
+            $title = get_the_title( $source_id );
+
+            if ( ! $title ) {
+                /* translators: %d: post ID */
+                $title = sprintf( __( 'Post #%d', 'unattached-media-manager' ), $source_id );
+            }
+
+            return array(
+                'title'     => $title,
+                'edit_link' => get_edit_post_link( $source_id ),
+                'view_link' => get_permalink( $source_id ),
+            );
+        }
+
+        if ( 'term' === $source_type ) {
+            $term = get_term( $source_id );
+
+            if ( ! $term || is_wp_error( $term ) ) {
+                return null;
+            }
+
+            $taxonomy  = get_taxonomy( $term->taxonomy );
+            $tax_label = $taxonomy ? $taxonomy->labels->singular_name : $term->taxonomy;
+
+            $title = sprintf(
+                /* translators: 1: term name, 2: taxonomy singular label */
+                __( '%1$s (%2$s)', 'unattached-media-manager' ),
+                $term->name,
+                $tax_label
+            );
+
+            $edit_link = get_edit_term_link( $term->term_id, $term->taxonomy );
+            $view_link = get_term_link( $term );
+
+            return array(
+                'title'     => $title,
+                'edit_link' => is_wp_error( $edit_link ) ? null : $edit_link,
+                'view_link' => is_wp_error( $view_link ) ? null : $view_link,
+            );
+        }
+
+        return null;
+    }
+
+    /**
      * Delete references by attachment
      *
      * @param int $attachment_id Attachment ID.
@@ -1235,12 +1335,66 @@ class UNMAM_Database {
     }
 
     /**
+     * Whether a URL plausibly points at this site's own media.
+     *
+     * Deliberately permissive. A wrong "yes" only keeps the filename fallback that ran for
+     * every URL before 1.3.0; a wrong "no" drops a real reference, and that is the direction
+     * that gets live files deleted. Anything ambiguous is therefore treated as ours.
+     *
+     * @param string $url URL to test.
+     * @return bool
+     */
+    public static function url_points_at_this_site( $url ) {
+        static $hosts = null;
+        static $uploads_path = null;
+
+        if ( null === $hosts ) {
+            $hosts    = array();
+            $uploads  = wp_upload_dir();
+            $baseurl  = isset( $uploads['baseurl'] ) ? $uploads['baseurl'] : '';
+            foreach ( array( home_url(), site_url(), $baseurl ) as $known ) {
+                $known_host = wp_parse_url( $known, PHP_URL_HOST );
+                if ( $known_host ) {
+                    $hosts[] = preg_replace( '/^www\./i', '', strtolower( $known_host ) );
+                }
+            }
+            $path         = $baseurl ? wp_parse_url( $baseurl, PHP_URL_PATH ) : '';
+            $uploads_path = $path ? rtrim( $path, '/' ) . '/' : '';
+        }
+
+        if ( ! is_string( $url ) || '' === $url ) {
+            return true;
+        }
+
+        $host = wp_parse_url( $url, PHP_URL_HOST );
+
+        // Relative, protocol-relative without a host, or unparseable: it can only be ours.
+        if ( empty( $host ) ) {
+            return true;
+        }
+
+        if ( in_array( preg_replace( '/^www\./i', '', strtolower( $host ) ), $hosts, true ) ) {
+            return true;
+        }
+
+        // A different host still carries the uploads path when media is served from a CDN or
+        // the site has moved domain. That is the case the filename fallback exists for.
+        $path = (string) wp_parse_url( $url, PHP_URL_PATH );
+        if ( '' !== $uploads_path && false !== strpos( $path, $uploads_path ) ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Resolve URL to attachment ID
      *
-     * @param string $url Image URL.
+     * @param string $url                     Image URL.
+     * @param bool   $allow_filename_fallback Whether the last-resort filename match may run.
      * @return int Attachment ID or 0 if not found.
      */
-    public static function url_to_attachment_id( $url ) {
+    public static function url_to_attachment_id( $url, $allow_filename_fallback = true ) {
         global $wpdb;
 
         // Try direct match first
@@ -1278,6 +1432,14 @@ class UNMAM_Database {
         // "2026/09/termmeta.png", so the wrong attachment gets credited with the reference:
         // an unrelated file looks used and never shows up for cleanup, while the file that
         // really was referenced can be left looking unused.
+        //
+        // It also has no host check, so it happily credits a local file to a URL that lives on
+        // somebody else's site and merely shares a basename. Callers handling URLs an editor
+        // typed (the ACF link, url and oembed fields) opt out for genuinely external URLs.
+        if ( ! $allow_filename_fallback ) {
+            return 0;
+        }
+
         $filename = basename( $url );
         $filename = preg_replace( '/-\d+x\d+(?=\.[a-z]{3,4}$)/i', '', $filename );
 

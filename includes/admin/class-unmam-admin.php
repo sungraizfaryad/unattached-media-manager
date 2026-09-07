@@ -810,6 +810,77 @@ class UNMAM_Admin {
                     </tr>
                 </table>
 
+                <h2 class="title"><?php esc_html_e( 'Taxonomies to Scan', 'unattached-media-manager' ); ?></h2>
+                <p class="description">
+                    <?php esc_html_e( 'Choose which taxonomies the scanner checks for media references. Media can be attached to a category, tag or custom taxonomy term just like a post (for example an ACF image field on a product category). Taxonomies added by a plugin later are picked up automatically.', 'unattached-media-manager' ); ?>
+                </p>
+                <p class="description" style="color: #b32d2e;">
+                    <strong><?php esc_html_e( 'Careful:', 'unattached-media-manager' ); ?></strong>
+                    <?php esc_html_e( 'Unticking a taxonomy means media used only on its terms is no longer counted as used, so it will start appearing in the Unused list and could be deleted. Only untick one if you are sure its terms hold no media you want to keep.', 'unattached-media-manager' ); ?>
+                </p>
+
+                <table class="form-table">
+                    <?php
+                    $scan_taxonomies_setting = isset( $settings['scan_taxonomies'] ) && is_array( $settings['scan_taxonomies'] )
+                        ? $settings['scan_taxonomies']
+                        : unmam_get_scannable_taxonomy_candidates();
+
+                    $public_taxonomies = array();
+                    foreach ( unmam_get_scannable_taxonomy_candidates() as $candidate_slug ) {
+                        $candidate_obj = get_taxonomy( $candidate_slug );
+                        if ( $candidate_obj ) {
+                            $public_taxonomies[ $candidate_slug ] = $candidate_obj;
+                        }
+                    }
+
+                    $builtin_taxonomies = array();
+                    $custom_taxonomies  = array();
+                    foreach ( $public_taxonomies as $slug => $obj ) {
+                        if ( ! empty( $obj->_builtin ) ) {
+                            $builtin_taxonomies[ $slug ] = $obj;
+                        } else {
+                            $custom_taxonomies[ $slug ] = $obj;
+                        }
+                    }
+                    ?>
+
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Built-in Taxonomies', 'unattached-media-manager' ); ?></th>
+                        <td>
+                            <fieldset>
+                                <?php foreach ( $builtin_taxonomies as $slug => $obj ) : ?>
+                                    <label style="display:block; margin-bottom:4px;">
+                                        <input type="checkbox" name="unmam_scan_taxonomy[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( in_array( $slug, $scan_taxonomies_setting, true ) ); ?>>
+                                        <?php echo esc_html( $obj->labels->name ); ?>
+                                        <code style="opacity:.7; font-size:11px;"><?php echo esc_html( $slug ); ?></code>
+                                    </label>
+                                <?php endforeach; ?>
+                            </fieldset>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Custom Taxonomies', 'unattached-media-manager' ); ?></th>
+                        <td>
+                            <fieldset>
+                                <?php if ( empty( $custom_taxonomies ) ) : ?>
+                                    <p class="description">
+                                        <?php esc_html_e( 'No public custom taxonomies are registered on this site. If your theme or a plugin defines a custom taxonomy (e.g. Product Category, Portfolio Type), it will appear here automatically.', 'unattached-media-manager' ); ?>
+                                    </p>
+                                <?php else : ?>
+                                    <?php foreach ( $custom_taxonomies as $slug => $obj ) : ?>
+                                        <label style="display:block; margin-bottom:4px;">
+                                            <input type="checkbox" name="unmam_scan_taxonomy[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( in_array( $slug, $scan_taxonomies_setting, true ) ); ?>>
+                                            <?php echo esc_html( $obj->labels->name ); ?>
+                                            <code style="opacity:.7; font-size:11px;"><?php echo esc_html( $slug ); ?></code>
+                                        </label>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </fieldset>
+                        </td>
+                    </tr>
+                </table>
+
                 <h2 class="title"><?php esc_html_e( 'Custom Database Tables (Advanced)', 'unattached-media-manager' ); ?></h2>
                 <p class="description">
                     <?php esc_html_e( 'Some plugins store content in their own database tables instead of posts or options (for example, newsletter plugins keep email HTML in custom tables). If media referenced there is showing up as "unused", list those locations below so the scanner can protect them.', 'unattached-media-manager' ); ?>
@@ -886,6 +957,15 @@ class UNMAM_Admin {
         // Strip attachment as a safety net.
         $scan_post_types   = array_values( array_diff( $scan_post_types, array( 'attachment' ) ) );
 
+        $submitted_taxonomies = isset( $_POST['unmam_scan_taxonomy'] ) && is_array( $_POST['unmam_scan_taxonomy'] )
+            ? array_map( 'sanitize_key', wp_unslash( $_POST['unmam_scan_taxonomy'] ) )
+            : array();
+
+        // Only accept slugs the plugin actually offers
+        // (defends against tampered POSTs registering arbitrary strings).
+        $registered_taxonomies = unmam_get_scannable_taxonomy_candidates();
+        $scan_taxonomies       = array_values( array_intersect( $submitted_taxonomies, $registered_taxonomies ) );
+
         // Custom database tables (advanced). Parse "table.column" lines, validate
         // each against the live schema, and keep only the ones that pass. Invalid
         // lines are reported back to the admin rather than silently dropped.
@@ -944,6 +1024,11 @@ class UNMAM_Admin {
             // decided on. Recording that is what stops the reconciliation on read from
             // re-ticking a type they just unticked.
             'scan_post_types_known' => unmam_get_scannable_post_type_candidates(),
+            'scan_taxonomies'      => $scan_taxonomies,
+            // Same reasoning as scan_post_types_known: saving means every taxonomy
+            // currently on offer has been shown to the admin and decided on, which is
+            // what stops the reconciliation on read from re-ticking one they just unticked.
+            'scan_taxonomies_known' => unmam_get_scannable_taxonomy_candidates(),
             'scan_custom_tables'   => $custom_tables,
             'resource_mode'        => $resource_mode,
             'processing_mode'      => $processing_mode,

@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -353,6 +353,24 @@ Your parser should implement the `UNMAM_Parser_Interface`.
 
 == Changelog ==
 
+= 1.3.0 =
+**Media attached to categories, tags and custom taxonomy terms is now found.**
+
+Nothing in the plugin read term meta before this release. If you used a plugin such as Advanced Custom Fields to put an image on a category, a product category or any other taxonomy term, that image was invisible to the scanner and was reported as unused. This was the single most common cause of a genuinely used file appearing in the Unused list.
+
+* **Taxonomy terms are now scanned.** A new scan step reads the data stored on every term in the taxonomies you have selected. Media found there is protected from deletion.
+* **Scanning terms is on by default.** After updating, every taxonomy on your site is selected automatically. You can untick individual taxonomies under Settings, and anything you untick stays unticked.
+* **New taxonomies are picked up on their own.** Register a taxonomy later and it is added to the scan, the same way post types have worked since 1.2.0.
+* **Wider ACF field coverage, on both posts and terms.** WYSIWYG, Textarea, Text, URL, Link, oEmbed and Icon Picker fields are now read for media, alongside the Image, Gallery and File fields that were already supported.
+* **Media referenced inside stored HTML is now found.** A custom field holding a block of markup (rather than a tidy single value) has its image tags and upload links read properly.
+* **Where Used shows terms.** A file used on a term now names the term and links to it, in the media modal, the REST API and WP-CLI.
+* **Replace Media works on terms.** Replacing a file now updates references held in term meta.
+* **Fixed: the REST and WP-CLI scan commands could not run every step.** Both had a hardcoded list of scan steps that had fallen out of date, so the custom database tables step was unreachable through them. Both now follow the real pipeline.
+
+**If you added `wp_termmeta.meta_value` under Custom Database Tables as a workaround, you can remove it after running a full scan on this version.**
+
+Your unused count may go down after updating, because files that were wrongly listed as unused are now correctly recognised as in use. Re-run a full scan after updating.
+
 = 1.2.0 =
 This release is mostly about the accuracy of the Unused list, in both directions.
 
@@ -446,6 +464,9 @@ This release is mostly about the accuracy of the Unused list, in both directions
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.3.0 =
+Media used on categories, tags and custom taxonomy terms, such as an ACF image field on a product category, was never scanned and was reported as unused. It is now found, and term scanning is on by default. Re-run a full scan after updating; your unused count may go down.
 
 = 1.2.0 =
 Much more accurate Unused list. Post types added after the plugin (such as WooCommerce products) were never scanned, so their images looked unused. Filename matching was too loose and credited the wrong file. Adds Restore All. Re-run a full scan after updating.

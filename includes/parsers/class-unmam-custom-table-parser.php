@@ -172,7 +172,7 @@ class UNMAM_Custom_Table_Parser {
             }
             $row_pk = isset( $row->unmam_pk ) ? (int) $row->unmam_pk : 0;
 
-            $found = $this->extract_attachment_refs( $value );
+            $found = UNMAM_Reference_Extractor::extract_from_text( $value );
             foreach ( $found as $attachment_id => $matched ) {
                 $references[] = array(
                     'attachment_id'   => (int) $attachment_id,
@@ -196,41 +196,5 @@ class UNMAM_Custom_Table_Parser {
             'references' => $references,
             'rows'       => count( $rows ),
         );
-    }
-
-    /**
-     * Extract attachment references from a text blob.
-     *
-     * Detects both `wp-image-{ID}` editor classes and uploaded-media URLs,
-     * resolving URLs to attachment IDs via the shared resolver.
-     *
-     * @param string $text Text to scan.
-     * @return array       Map of attachment_id => matched URL (string) or attachment_id (int).
-     */
-    private function extract_attachment_refs( $text ) {
-        $results = array();
-
-        // 1. wp-image-{ID} classes (editor-inserted images).
-        if ( preg_match_all( '/wp-image-(\d+)/', $text, $matches ) ) {
-            foreach ( $matches[1] as $id ) {
-                $id = (int) $id;
-                if ( $id > 0 && 'attachment' === get_post_type( $id ) ) {
-                    $results[ $id ] = $id;
-                }
-            }
-        }
-
-        // 2. Direct media URLs.
-        $url_re = '#https?://[^\s"\'<>()]+?\.(?:jpe?g|png|gif|webp|svg|bmp|ico|avif|mp4|m4v|webm|ogg|ogv|mp3|wav|m4a|pdf|docx?|pptx?|xlsx?|zip)#i';
-        if ( preg_match_all( $url_re, $text, $url_matches ) ) {
-            foreach ( array_unique( $url_matches[0] ) as $url ) {
-                $attachment_id = UNMAM_Database::url_to_attachment_id( $url );
-                if ( $attachment_id ) {
-                    $results[ (int) $attachment_id ] = $url;
-                }
-            }
-        }
-
-        return $results;
     }
 }

@@ -5,72 +5,44 @@ adversarially reviewed already; this is the surviving conclusion, not a fresh gu
 
 ---
 
-## 1.3.0 — Terms scanning
+## 1.3.0 — Terms scanning (BUILT, NOT TESTED)
 
-**Why:** nothing in the plugin reads term meta. ACF fields on a taxonomy term, including a
-WYSIWYG editor field, are invisible, so media used only there is reported unused. Reported
-by @galbaras on the WordPress.org forum, who confirmed the diagnosis by adding
-`wp_termmeta.meta_value` through the 1.0.9 custom-tables feature and watching the problem
-disappear. He is waiting on this and should be told when he can drop that workaround.
+Implemented on `feature/1.3.0-terms`. The design that was actually built is
+`dev/specs/2026-09-06-terms-scanning-design.md`, which supersedes the plan that used to sit
+here. Two things changed from that plan during implementation:
 
-### Shape
+- **Terms scanning ships on by default**, not opt-in. Opt-in recreates the class of bug 1.2.0
+  fixed for post types: a silent gap for anyone who never opens Settings.
+- **The meta parser gained a text-extraction fallback**, so a WYSIWYG value in term meta is
+  found even with ACF absent. Review then found the fallback was unreachable, because
+  `looks_like_media_url()` claimed the whole markup blob and returned early. Fixed by only
+  returning early when the URL branch actually produced a reference.
 
-A new scan type, gated on a new `scan_taxonomies` setting so installs that never opt in keep
-the exact pipeline they have today. `wp_terms.term_id` is a monotonic bigint, so the cursor
-pattern in `scan_posts_batch()` transfers directly.
+All three "things that will bite" were handled and verified by review: the cleanup collision
+with the WooCommerce term rows, Replace Media's context-type-only branching, and the five
+Where Used renderers. See CLAUDE.md section 3.
 
-- `get_active_scan_types()` appends `terms` only when `scan_taxonomies` is non-empty. Mirror
-  how `custom_tables` is appended. Never append unconditionally.
-- `run_batch()` gains a `terms` case.
-- New `scan_terms_batch()` and `index_term()`.
-- New `UNMAM_Term_Parser_Interface` with `parse_term( $term )`, alongside the existing
-  interface rather than changing it. `UNMAM_Meta_Parser` and `UNMAM_ACF_Parser` implement it.
-- ACF terms: `acf_get_field_groups( array( 'taxonomy' => $term->taxonomy ) )`, values read
-  with `get_field( $name, 'term_' . $term_id, false )`. Confirm the legacy
-  `{taxonomy}_{term_id}` format is not still in use on older ACF before dropping it.
-- References use `source_type` `term` and `context_type` `term_meta` / `term_acf`.
-- Terms must never auto-attach. A term is not a post. Same rule as `custom_table`.
-- Settings: a taxonomy checklist mirroring the post types one. **It must be added to the
-  literal array in `save_settings()`**, see the mines in CLAUDE.md.
-- Live hooks for parity with posts: `edited_term` and `created_term` to `index_term()`,
-  `delete_term` to a reference cleanup.
+**Nothing has been tested against FLP yet.** That is the next task. `dev/TESTING.md` has the
+plan, including copying ACF Pro in, since FLP does not have it.
 
-### Three things that will bite
+### Deferred out of 1.3.0, deliberately
 
-1. **Cleanup collision.** `index_term()` must not delete by `source_type = 'term'` alone.
-   The WooCommerce parser already writes category thumbnails as term rows during the options
-   step, and a bare source-type delete wipes them. Use
-   `UNMAM_Database::delete_references_by_source_and_context()`, which exists for this reason.
-2. **Replace Media.** `UNMAM_Attachment_Manager::replace_single_reference()` branches on
-   `context_type` only, and its `postmeta` / `acf` cases call `get_post_meta()` and
-   `update_post_meta()` on `source_id`. It does have a `default:` case returning "Unsupported
-   reference type", so **as long as term rows use distinct context types** (`term_meta`,
-   `term_acf`) they fall through to that and safely do nothing. Replace Media just will not
-   work for terms until a branch is added.
-   The danger is reusing `postmeta` or `acf` as the context type for a term row. Then the
-   existing cases match, and it reads and writes post meta using a term id as the post id.
-   Do not reuse those strings.
-3. **Where Used.** 1.2.0 stopped it rendering a wrong post title for non-post rows, but it
-   now renders nothing useful for a term. It needs the term name plus `get_edit_term_link()`.
-   There are four PHP copies of this rendering (`class-unmam-media-modal.php` twice, the REST
-   controller, the CLI `usage` command) and one in `assets/js/media-modal.js`.
-
-### Bundle with it
-
-Widening the ACF media field types is half a day and only pays off once terms exist, because
-on posts the generic meta parser already catches WYSIWYG content as a fallback. On terms
-there is no fallback.
-
-Add `wysiwyg`, `textarea`, `text`, `url`, `link`, `oembed` and ACF 6.1+'s `icon_picker`.
-These are text-shaped, so they need a third routing bucket that extracts URLs and
-`wp-image-{ID}` classes, not the existing ID-shaped `parse_media_field()`. Reuse the
-extraction in `UNMAM_Custom_Table_Parser::extract_attachment_refs()` rather than writing a
-third copy of that regex. Watch for double counting against the generic meta parser.
-
-The review flagged that ACF Group-nested subfields may already be mishandled for existing
-image fields. Worth checking while in there.
-
-**Estimate:** about a day and a half, plus half a day for the ACF widening.
+- **External URLs, partially fixed.** `url_to_attachment_id()`'s filename fallback has no host
+  check, so a link to someone else's `banner.jpg` credits ours. 1.3.0 gates it for the ACF
+  `url` / `link` / `oembed` / `icon_picker` fields via `url_points_at_this_site()`, which
+  still allows same-host, host-relative and any-host-with-an-uploads-path URLs so CDNs and
+  moved domains keep resolving.
+  **It is bypassed and testing proved it.** ACF stores a `link` as a serialized array with a
+  `url` key, so `UNMAM_Meta_Parser::parse_complex_value()` credits the same external URL again
+  through the `term_meta` row. Closing it properly means gating the fallback for all post meta
+  on every install. That is the under-reporting direction, it changes what counts as used for
+  existing sites, and 1.3.0 already moves that number a lot, so it would muddy attribution if
+  anyone reports a problem. Own release, own changelog line, own test pass.
+- The generic meta parser treats a bare numeric meta value as an attachment ID on any key
+  name, not just known ones, whenever it resolves to a real attachment. This contradicts the
+  "numeric IDs stay gated on known key names" rule that the options parser follows, and term
+  meta now reaches it too. Tightening it would drop genuine references from every plugin that
+  uses its own key names, so it needs its own release and its own testing, not a bundled fix.
 
 ---
 
@@ -120,14 +92,12 @@ plainly in the changelog rather than overselling it.
   values bound separately, which is why they were left alone.
 - The admin page heading still reads "All-in-One Media Solution", the plugin's original name.
   User visible, unlike the internal prefixes, which are deliberate.
-- **Three hardcoded scan-type lists, all already stale.** `wp unmam status`
-  (`class-unmam-cli-commands.php:616`), the REST `/scan/batch` endpoint's `enum`
-  (`class-unmam-rest-controller.php:108`) and `UNMAM_Scanner::get_scan_status()` all name
-  steps individually, and the first two are already missing `custom_tables` today. That means
-  a REST caller cannot run the custom-tables step at all. Point them at
-  `get_active_scan_types()`; otherwise every new scan type needs three separate edits and
-  will be forgotten in at least one.
 - `unmam_bulk_delete_unused` is registered but nothing in the admin JS calls it.
+- The REST `/scan/batch` `type` arg declares an `enum` but no `validate_callback`, and
+  WordPress only enforces `enum` when one is present. So an unknown type is accepted and
+  falls through `run_batch()`'s `default:` case to a no-op that reports `running` forever.
+  Pre-existing, harmless (the endpoint is admin-only), cosmetic to fix: add
+  `'validate_callback' => 'rest_validate_request_arg'`.
 
 ---
 
@@ -136,5 +106,5 @@ plainly in the changelog rather than overselling it.
 | Who | Issue | Status |
 |---|---|---|
 | @adeqx | Trashed media still rendering; restore was painful | Answered. Restore All, toolbar order and page size shipped in 1.2.0. **Not yet told that theme/CSS references are still unhandled**, which may be his actual cause. Tell him before he re-tests. |
-| @galbaras | ACF fields on WooCommerce product categories | Diagnosis confirmed by him. Workaround in place. Waiting on 1.3.0. Tell him when the `wp_termmeta` entry can be removed. |
+| @galbaras | ACF fields on WooCommerce product categories | Diagnosis confirmed by him. He re-tested 1.2.0 against an SEO Macroscope crawl and found the unused list accurate, but still with the `wp_termmeta` workaround in place. 1.3.0 is built, not yet tested. Tell him when the entry can be removed. |
 | @kreativelabs | Bricks Builder templates not scanned | Diagnosed as the post-type snapshot plus `public`-only filtering, both fixed in 1.2.0. **Unverified**, he never confirmed. Ask whether 1.2.0 fixes it. |

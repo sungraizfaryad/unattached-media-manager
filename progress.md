@@ -1,67 +1,48 @@
-_Last updated: 2026-09-05._
-_Quick status. Mines and architecture in CLAUDE.md. Next-release design in `dev/ROADMAP.md`._
+_Last updated: 2026-09-06._
+_Quick status. Mines and architecture in CLAUDE.md. Remaining release design in `dev/ROADMAP.md`._
 
 ## Where things stand
 
-1.2.0 is live on WP.org (SVN r3682339) and GitHub (`main`, tag `1.2.0`). It was a large
-accuracy release: nine correctness fixes and three trash UX changes.
+1.2.0 is live. @galbaras re-tested it against an independent SEO Macroscope crawl and found
+every file on the unused list genuinely unused, with his `wp_termmeta.meta_value` workaround
+still in place. That confirms the accuracy work but not the terms gap, which is what 1.3.0 closes.
 
-Two of those fixes were regressions introduced during the work itself and caught by review
-before release, both in the dangerous direction. Worth remembering: the options step stopped
-rescanning at all without `--reset`, and an ACF save dropped option references. See CLAUDE.md
-section 3 for the rules that came out of it.
+1.3.0 is **built but not tested**, on `feature/1.3.0-terms`. Do not deploy it.
 
 ## Done
 
-- **1.2.0** (LIVE). Reported unused but actually in use: stale `scan_post_types` snapshot, so
-  post types registered after the plugin were never scanned; candidates filtered on `public`
-  only, missing builder templates, `wp_block` and `wp_navigation`; `index_post()` and the
-  batch scan disagreeing so a scan deleted what a save created; WooCommerce and SEO
-  `parse_options()` never called; options sweep capped at 1000 rows and 5 name patterns
-  (128 to 2268 options scanned on the test site); nested option URLs only found under 6 key
-  names. Reported used but not in use: `url_to_attachment_id()` matching any value ending in
-  the filename, so `A.png` matched `termmeta.png`; Meta Box treating every numeric field as an
-  attachment ID; `wp-image-{ID}` and `data-id` trusted without checking. UX: Restore All,
-  toolbar reordered, page size selector. Also fixed `wp unmam stats`, two i18n errors, and an
-  over-long upgrade notice. Added a notice naming post types that hold content but are not
-  scanned, since an install already broken by the snapshot bug cannot be repaired
-  automatically without overriding someone's settings.
-- **1.1.1** (LIVE). `EMPTY_TRASH_DAYS=0` data-loss guard, trash-view notices, corrected
-  deletion guidance.
-- **1.1.0** (LIVE). Unused-tab file URLs, Copy URL, CSV export, per-file Exclude.
+- **1.3.0 (code complete, unverified).** New `terms` scan step, on by default, gated on
+  `scan_taxonomies` with `scan_taxonomies_known` reconciliation. New
+  `UNMAM_Term_Parser_Interface` implemented by the meta and ACF parsers. New
+  `UNMAM_Reference_Extractor` as the single copy of the media-in-text regex. ACF widened to
+  wysiwyg, textarea, text, url, link, oembed, icon_picker on posts and terms. Where Used and
+  Replace Media handle terms. The three hardcoded scan-type lists now read
+  `get_active_scan_types()`.
+- **1.2.0** (LIVE). Nine correctness fixes, three trash UX changes. See git history.
 
 ## Decisions
 
-- Terms scanning and filesystem scanning are separate releases, not one. Terms is a day and a
-  half with two users waiting; filesystem is two days and its value is narrower than first
-  assumed. Splitting gets Gal his fix weeks earlier.
-- Post-type reconciliation stores `scan_post_types_known`, seeded on first run from the
-  current candidate set. Seeding it from the admin's selection would silently re-enable every
-  type they had unticked.
-- Where a repair is impossible without guessing at intent, tell the admin rather than guess.
-  That is why the unscanned-post-types notice exists instead of auto-enabling.
-- Numeric IDs stay gated on known key names; only URLs are matched on any key. Matching bare
-  numbers anywhere is what made Meta Box invent references.
+- Terms scanning ships **on by default**, against the roadmap's opt-in shape. Opt-in recreates
+  the 1.2.0 post-type bug for anyone who never opens Settings.
+- The meta parser's URL branch now falls through when it fails to resolve. Review found that
+  `looks_like_media_url()` swallowed every WYSIWYG blob and returned early, so the new
+  extractor fallback was dead code for the exact case it was written for.
+- Two known over-reports are accepted, both because the alternative under-reports: the
+  hostless filename fallback in `url_to_attachment_id()`, and bare numeric meta values on
+  arbitrary key names. Both documented in CLAUDE.md section 3.
 
 ## Next
 
-- **1.3.0: terms scanning**, plus widening the ACF media field types. Designed and reviewed,
-  see `dev/ROADMAP.md`, including the three things that will bite (cleanup collision with the
-  WooCommerce term rows, Replace Media reading the wrong table, Where Used rendering).
-- **1.4.0: filesystem scanning.** Same doc. Be honest in the changelog that it mainly catches
-  CSS backgrounds, not dynamically built URLs.
-- **Forum follow-ups, all in `dev/ROADMAP.md`.** @adeqx has not been told the theme/CSS gap is
-  still open and may re-test and find his list still wrong. @galbaras should be told when he
-  can drop his `wp_termmeta` workaround. @kreativelabs never confirmed the Bricks diagnosis;
-  ask whether 1.2.0 fixed it.
-- Expect forum traffic about unused counts changing on upgrade. 1.2.0 changes what counts as
-  used on every install.
+1. **Test 1.3.0 against FLP.** Nothing has been run yet. `dev/TESTING.md` has the plan;
+   fixture should go from 3 of 7 to 6 of 7. ACF is not installed on FLP and must be copied in.
+2. Tell @galbaras when he can drop the `wp_termmeta` workaround. Tell @adeqx the theme/CSS gap
+   is still open. Ask @kreativelabs whether 1.2.0 fixed Bricks.
+3. **1.4.0: filesystem scanning.** `dev/ROADMAP.md`.
 
 ## Key files
 
-- `includes/class-unmam-scanner.php` — scan chain, `get_active_scan_types()`, `scan_options()`.
-- `includes/class-unmam-database.php` — `url_to_attachment_id()`, `is_attachment_id()`, unused
-  queries, trash/restore/delete.
-- `unattached-media-manager.php` — post-type candidates, settings reconciliation.
-- `includes/admin/class-unmam-admin.php` — settings save handler, trash toolbar, notices.
-- `dev/` — test harness and roadmap, never shipped.
+- `includes/class-unmam-scanner.php` — scan chain, `scan_terms_batch()`, `index_term()`.
+- `includes/class-unmam-reference-extractor.php` — shared media-in-text extraction.
+- `includes/parsers/class-unmam-meta-parser.php` — term meta, and the branch-order fix.
+- `unattached-media-manager.php` — taxonomy candidates, settings reconciliation, term hooks.
+- `dev/specs/2026-09-06-terms-scanning-design.md` — the approved 1.3.0 design.
