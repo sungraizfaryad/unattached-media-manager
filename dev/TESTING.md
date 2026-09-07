@@ -96,6 +96,33 @@ then `curl -sk -b jar https://flp.local/wp-admin/admin.php?page=unattached-media
 Delete the jar afterwards. The same cookies drive `admin-ajax.php`, which is how Restore All
 was verified end to end; the nonce is in the `unmamAdmin` object in the page source.
 
+## Snapshot before installing anything heavy
+
+Counts are not enough. Snapshot the actual rows you might delete, or you cannot tell your own
+debris from the site's content when cleaning up:
+
+```bash
+dev/flpwp.sh eval 'global $wpdb;
+file_put_contents("/tmp/snap-pages.txt", implode("\n", $wpdb->get_col("SELECT CONCAT(ID,\"|\",post_name) FROM {$wpdb->posts} WHERE post_type=\"page\"")));
+file_put_contents("/tmp/snap-tables.txt", implode("\n", $wpdb->get_col("SHOW TABLES")));
+file_put_contents("/tmp/snap-options.txt", implode("\n", $wpdb->get_col("SELECT option_name FROM {$wpdb->options}")));'
+```
+
+Diff against those before deleting, and delete only what the diff says you added. Testing the
+WooCommerce fix for 1.3.1 removed five pages (`cart`, `checkout`, `my-account`, `shop`,
+`refund_returns`) that turned out to be leftovers from an earlier WooCommerce install on FLP,
+not from that session. They were WooCommerce debris rather than site content, but only counts
+had been recorded, so there was no way to know that before deleting.
+
+Signs that a heavy plugin has been installed on FLP before: a `woocommerce-placeholder`
+attachment, orphan `product_*` taxonomy terms, or WooCommerce's pages with no WooCommerce
+active.
+
+**WooCommerce specifics.** `set_downloads()` rejects any file outside an approved directory, so
+set `wc_downloads_approved_directories_mode` to `disabled` before seeding downloadable
+products. Activating WooCommerce through WP-CLI does not always run its full install routine,
+so it may create no tables at all; diff `SHOW TABLES` rather than assuming.
+
 ## Things worth testing every release
 
 - Upgrade path: set `unmam_settings` to a pre-release shape with a post type deliberately
