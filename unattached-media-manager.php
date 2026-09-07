@@ -4,7 +4,7 @@
  * Plugin Name: Unattached Media Manager
  * Plugin URI: https://wordpress.org/plugins/unattached-media-manager/
  * Description: Fix the WordPress Unattached media filter. Automatically attach used media files to their posts so you can safely clean up your library.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author: Sungraiz Faryad
@@ -108,7 +108,7 @@ function unmam_get_scannable_taxonomy_candidates()
 }
 
 // Plugin constants
-define('UNMAM_VERSION', '1.3.0');
+define('UNMAM_VERSION', '1.3.1');
 define('UNMAM_PLUGIN_FILE', __FILE__);
 define('UNMAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('UNMAM_PLUGIN_URL', plugin_dir_url(__FILE__));

@@ -76,13 +76,20 @@ class UNMAM_WooCommerce_Parser implements UNMAM_Parser_Interface {
             }
         }
 
-        // Variation images (for variable products)
+        // Variations. get_children() rather than get_available_variations(): the latter only
+        // returns purchasable, visible variations, so media on a disabled or hidden one looked
+        // unused, and it builds a full display array per variation for no reason here.
         if ( $product->is_type( 'variable' ) ) {
-            $variations = $product->get_available_variations();
-            foreach ( $variations as $variation ) {
-                if ( ! empty( $variation['image_id'] ) ) {
+            foreach ( $product->get_children() as $variation_id ) {
+                $variation = wc_get_product( $variation_id );
+                if ( ! $variation ) {
+                    continue;
+                }
+
+                $image_id = $variation->get_image_id();
+                if ( $image_id ) {
                     $references[] = array(
-                        'attachment_id'   => (int) $variation['image_id'],
+                        'attachment_id'   => (int) $image_id,
                         'source_id'       => $post->ID,
                         'source_type'     => 'post',
                         'context_type'    => 'woocommerce',
@@ -91,30 +98,74 @@ class UNMAM_WooCommerce_Parser implements UNMAM_Parser_Interface {
                         'reference_type'  => 'id',
                     );
                 }
+
+                // A variable parent is never itself downloadable, so the parent-level check
+                // below never sees these. Files sold through a variation were reported unused.
+                $references = array_merge(
+                    $references,
+                    $this->collect_downloads(
+                        $variation,
+                        $post->ID,
+                        'variation_downloadable_file',
+                        __( 'WooCommerce Variation Download', 'unattached-media-manager' )
+                    )
+                );
             }
         }
 
-        // Downloadable files
-        if ( $product->is_downloadable() ) {
-            $downloads = $product->get_downloads();
-            foreach ( $downloads as $download ) {
-                $file_url = $download->get_file();
-                if ( ! empty( $file_url ) ) {
-                    $attachment_id = UNMAM_Database::url_to_attachment_id( $file_url );
-                    if ( $attachment_id ) {
-                        $references[] = array(
-                            'attachment_id'   => $attachment_id,
-                            'source_id'       => $post->ID,
-                            'source_type'     => 'post',
-                            'context_type'    => 'woocommerce',
-                            'context_key'     => 'downloadable_file',
-                            'context_label'   => __( 'WooCommerce Downloadable File', 'unattached-media-manager' ),
-                            'reference_type'  => 'url',
-                            'reference_value' => $file_url,
-                        );
-                    }
-                }
+        // Downloadable files on the product itself (simple, external, grouped).
+        $references = array_merge(
+            $references,
+            $this->collect_downloads(
+                $product,
+                $post->ID,
+                'downloadable_file',
+                __( 'WooCommerce Downloadable File', 'unattached-media-manager' )
+            )
+        );
+
+        return $references;
+    }
+
+    /**
+     * Collect download references from a product or a variation.
+     *
+     * Shared so the parent and variation paths cannot drift apart again.
+     *
+     * @param WC_Product $product   Product or variation.
+     * @param int        $source_id Post ID to credit, always the parent product.
+     * @param string     $key       Context key.
+     * @param string     $label     Context label.
+     * @return array
+     */
+    private function collect_downloads( $product, $source_id, $key, $label ) {
+        $references = array();
+
+        if ( ! $product->is_downloadable() ) {
+            return $references;
+        }
+
+        foreach ( $product->get_downloads() as $download ) {
+            $file_url = $download->get_file();
+            if ( empty( $file_url ) ) {
+                continue;
             }
+
+            $attachment_id = UNMAM_Database::url_to_attachment_id( $file_url );
+            if ( ! $attachment_id ) {
+                continue;
+            }
+
+            $references[] = array(
+                'attachment_id'   => $attachment_id,
+                'source_id'       => $source_id,
+                'source_type'     => 'post',
+                'context_type'    => 'woocommerce',
+                'context_key'     => $key,
+                'context_label'   => $label,
+                'reference_type'  => 'url',
+                'reference_value' => $file_url,
+            );
         }
 
         return $references;
