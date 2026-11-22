@@ -90,6 +90,9 @@ class UNMAM_Scanner {
         // Meta parser (generic postmeta)
         $this->parsers['meta'] = new UNMAM_Meta_Parser();
 
+        // Additional CSS and Site Editor styles. Returns nothing for any other post type.
+        $this->parsers['design'] = new UNMAM_Design_Parser();
+
         // Options parser
         if ( ! empty( $settings['scan_options'] ) ) {
             $this->parsers['options'] = new UNMAM_Options_Parser();

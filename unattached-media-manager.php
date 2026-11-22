@@ -261,6 +261,7 @@ final class Unattached_Media_Manager
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-woocommerce-parser.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-seo-parser.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-custom-table-parser.php';
+        require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-design-parser.php';
 
         // Admin
         if (is_admin()) {
