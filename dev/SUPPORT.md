@@ -12,7 +12,7 @@ reproduction code. Everything he has reported has turned out to be real.
 
 ### Thread 1 — ACF fields on WooCommerce product categories
 
-**Status: fixed in 1.3.0. Reply below not yet sent as of 2026-09-07.**
+**Status: fixed in 1.3.0. Reply below was posted 2026-09-07 (checked on the forum 2026-11-22).**
 
 Term meta was never scanned, so an ACF field on a product category was invisible and its media
 was reported unused. He confirmed the diagnosis himself by adding `wp_termmeta.meta_value`
@@ -49,7 +49,7 @@ Sungraiz
 
 ### Thread 2 — WooCommerce variation downloads reported unused
 
-**Status: fixed in 1.3.1. Reply below not yet sent as of 2026-09-07.**
+**Status: fixed in 1.3.1. Reply below was posted 2026-09-07 (checked 2026-11-22).**
 
 He supplied a working reproduction snippet. Confirmed and fixed. A variable product is not
 itself downloadable, so the parent-level `is_downloadable()` guard skipped every file sold
@@ -87,7 +87,7 @@ Sungraiz
 
 ### Thread 3 — move trashed files so they stop resolving on the front end
 
-**Status: open, deliberately deferred. Reply below not yet sent.**
+**Status: open, deliberately deferred. A version of the reply below was posted 2026-09-07 in Ade's thread, where Gal raised it.**
 
 He points out that WordPress trash only changes `post_status`, so the file stays on disk and
 keeps rendering, which means trashing cannot be used to test a deletion before committing to it.
@@ -125,7 +125,7 @@ Sungraiz
 
 ### Thread 1 — trashed media still rendering, restore was painful
 
-**Status: all three requests shipped in 1.2.0. He was never told. Reply below not yet sent.**
+**Status: all three requests shipped in 1.2.0. He was told they were built (forum, early September) and closed the thread on good terms 2026-09-07. Still never told the theme/CSS caveat. Reply below not yet sent.**
 
 He had trashed 2000+ items, found images still rendering, and restored everything 20 at a time.
 His three asks were a Restore All, larger batches, and moving Restore away from the delete
@@ -171,10 +171,35 @@ Sungraiz
 
 ## @kreativelabs
 
-**Status: unverified, needs a nudge.**
+**Status: unverified. On 2026-09-07 he said he would test the new version in a few days and never came back. Needs a nudge.**
 
 Bricks Builder templates not being scanned. Diagnosed as the post-type snapshot plus the
 `public`-only filter, both fixed in 1.2.0. He never confirmed. Ask whether it is resolved.
+
+---
+
+## New since 1.3.1 (read off the forum 2026-11-22, none answered yet)
+
+### @galbaras — "Beyond the media library" (2026-09-19)
+
+**Status: no reply.** Image files sitting in `uploads` with no attachment row at all: left over
+from old themes, plugins, buggy imports. Wants them found and cleaned, partly because Google
+Images may still index them. **This is not the 1.4.0 filesystem scan**, which reads theme and
+plugin files for references to library media. Finding orphan files is a separate feature, and
+deleting one is permanent because there is no attachment to trash. It wants the move-aside
+quarantine (his Thread 3) built first.
+
+### @gemini23 — "How to recover image from trash?" (2026-11-10)
+
+**Status: no reply.** Could not find Restore. Answer: Unused Media tab, Trash view. Core's Media
+Library hides attachment trash unless `MEDIA_TRASH` is on, which is likely why. 1.3.2 makes the
+In Trash count a link. **Time-sensitive:** they have thousands of files in the trash and core
+purges them after `EMPTY_TRASH_DAYS`, so warn them about the deadline and the wp-config setting.
+
+### @gemini23 — "Can a search option be added to trash" (2026-11-11)
+
+**Status: built in 1.3.2, not yet released or replied to.** Thousands of trashed images, needs
+to find one or two to restore. Spec in `specs/2026-11-22-trash-search-design.md`.
 
 ---
 

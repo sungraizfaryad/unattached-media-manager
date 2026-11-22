@@ -1,45 +1,37 @@
-_Last updated: 2026-09-07._
-_Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum threads and
-drafted replies in `dev/SUPPORT.md`._
+_Last updated: 2026-11-22._
+_Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum threads in `dev/SUPPORT.md`._
 
 ## Where things stand
 
-**1.3.1 is live** on WP.org (SVN r3685086) and GitHub (`main`, tag `1.3.1`). Two releases
-shipped on 2026-09-07: 1.3.0 then 1.3.1.
+**1.3.1 is live** (WP.org SVN r3685086, GitHub `main`, tag `1.3.1`), 300+ installs.
+**1.3.2 is built and tested on FLP, uncommitted, on branch `trash-search`.** Not pushed or deployed.
 
 ## Done
 
-- **1.3.0** — taxonomy term scanning, on by default with `scan_taxonomies` /
-  `scan_taxonomies_known` reconciliation. New `UNMAM_Term_Parser_Interface` and
-  `UNMAM_Reference_Extractor`. ACF widened to wysiwyg, textarea, text, url, link, oembed,
-  icon_picker. Where Used and Replace Media handle terms. The three hardcoded scan-type lists
-  now read `get_active_scan_types()`.
-- **1.3.1** — downloadable files on WooCommerce product variations were never scanned, because
-  a variable parent is not itself downloadable. Also fixed images on hidden or disabled
-  variations (`get_available_variations()` returns only purchasable ones).
+- **1.3.2 trash search.** Unused view's filter bar now also on Trash (one shared
+  `UNMAM_Database::list_filter_clause()`). Restore All and Empty Trash hidden while filtered.
+  Auto-delete column (`_wp_trash_meta_time` + `EMPTY_TRASH_DAYS`). In Trash card links to Trash.
+  View switch drops filter params. Spec: `dev/specs/2026-11-22-trash-search-design.md`.
+- FLP test: Unused filters identical before/after across 11 combos; 30 throwaway trashed files
+  covered search, type, date, paging, per-page, empty result, overdue and no-meta dates; Restore
+  Selected via AJAX restored only the ticked two. FLP diffed clean against baseline after.
+- 1.3.0 terms scanning, 1.3.1 WooCommerce variation downloads (see changelog).
 
 ## Decisions
 
-- Terms scanning ships **on by default**, against the roadmap's opt-in shape. Opt-in recreates
-  the 1.2.0 post-type bug for anyone who never opens Settings.
-- **No front-end code, for now.** The badge / usage observer / access-log ideas were designed
-  and deferred: the plugin currently has zero public-facing footprint and that is a category
-  change in risk for ~200 installs. Gal's file-quarantine request was deferred for the same
-  reason plus the desync bugs Media Cleaner still has. See `dev/ROADMAP.md`.
-- Two known over-reports accepted, both because the alternative under-reports: the hostless
-  filename fallback in `url_to_attachment_id()`, and bare numeric meta values on arbitrary key
-  names.
+- Whole-trash buttons hidden when filtered, not relabelled: same rule as Trash All on Unused.
+- Gal's "Beyond the media library" (orphan files on disk) is NOT the 1.4.0 filesystem scan, and
+  needs the quarantine work first. No front-end code still stands.
 
 ## Next
 
-1. **Send the drafted replies** in `dev/SUPPORT.md` — Gal (two threads), Ade (never told his
-   1.2.0 requests shipped, or that theme/CSS media is still undetected), kreativelabs (unverified).
-2. Watch for reports about unused counts changing after 1.3.0.
-3. **1.4.0: filesystem scanning**, or the verification feature if field reports justify it.
+1. Sungraiz reviews 1.3.2; then commit, merge, deploy (`~/Local Sites/plugins/deploy.sh`).
+2. Forum replies (he drafts): Gemini23 x2 (trash deadline is urgent), Gal orphan files, kreativelabs nudge, Ade theme caveat.
+3. 1.4.0: theme/plugin file scanning per `dev/ROADMAP.md`.
+4. Local phpcs has no WordPress standard installed, so 1.3.2 was not sniffed; run Plugin Check before deploy.
 
 ## Key files
 
-- `includes/class-unmam-scanner.php` — scan chain, `scan_terms_batch()`, `index_term()`.
-- `includes/class-unmam-reference-extractor.php` — shared media-in-text extraction.
-- `includes/parsers/class-unmam-woocommerce-parser.php` — `collect_downloads()`, variations.
+- `includes/class-unmam-database.php` — `list_filter_clause()`, `get_trashed_attachments()`.
+- `includes/admin/class-unmam-admin.php` — Unused/Excluded/Trash rendering, `$view_url`.
 - `dev/SUPPORT.md`, `dev/ROADMAP.md`, `dev/TESTING.md`, `dev/specs/`.
