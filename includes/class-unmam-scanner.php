@@ -177,6 +177,10 @@ class UNMAM_Scanner {
                 $result = $this->scan_custom_tables();
                 break;
 
+            case 'files':
+                $result = UNMAM_File_Scanner::scan_batch();
+                break;
+
             default:
                 /**
                  * Allow custom scan types
@@ -875,7 +879,8 @@ class UNMAM_Scanner {
      * posts/options/widgets sequence always runs. 'terms' is appended only
      * when at least one taxonomy is selected, and 'custom_tables' only when
      * the admin has configured at least one table/column entry, so installs
-     * that never opt in behave exactly as before.
+     * that never opt in behave exactly as before. 'files' comes last, while
+     * the Theme and plugin files setting is on.
      *
      * @return string[]
      */
@@ -891,6 +896,10 @@ class UNMAM_Scanner {
             $types[] = 'custom_tables';
         }
 
+        if ( ! empty( $settings['scan_files'] ) ) {
+            $types[] = 'files';
+        }
+
         return $types;
     }
 
@@ -901,6 +910,11 @@ class UNMAM_Scanner {
      * @return array
      */
     public function full_scan( $reset = true ) {
+        // The files step does not rewind itself when it is re-entered, so a new pass starts here,
+        // reset or not. The first files batch clears the old file rows.
+        UNMAM_Database::reset_scan_progress( 'files' );
+        delete_option( UNMAM_File_Scanner::STATE_OPTION );
+
         if ( $reset ) {
             UNMAM_Database::reset_scan_progress();
             global $wpdb;
@@ -1050,12 +1064,13 @@ class UNMAM_Scanner {
         $completed   = 0;
         $step_count  = count( $active_types );
 
-        // 'posts' is weighted by its real item count; the other steps count as
-        // a single unit each (they complete in one or a few batches).
+        // 'posts' and 'files' are weighted by their real item counts (posts, and
+        // components for files); the other steps count as a single unit each (they
+        // complete in one or a few batches).
         foreach ( $active_types as $type ) {
             $row = isset( $progress[ $type ] ) ? $progress[ $type ] : null;
 
-            if ( 'posts' === $type ) {
+            if ( 'posts' === $type || 'files' === $type ) {
                 if ( $row ) {
                     $total     += (int) $row['total_items'];
                     $processed += (int) $row['processed_items'];

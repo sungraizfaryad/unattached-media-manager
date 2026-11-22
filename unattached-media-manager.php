@@ -162,6 +162,7 @@ function unmam_activate_plugin()
         'excluded_post_types'  => array('revision', 'nav_menu_item'), // Legacy: kept for backward compat; superseded by scan_post_types
         'scan_post_types'      => unmam_default_scan_post_types(),
         'scan_custom_tables'   => array(), // List of array('table','column') the admin opted into. Empty = feature off.
+        'scan_files'           => true,
         'resource_mode'        => 'auto', // auto, low, high
         'processing_mode'      => null,   // null = not set (show first-time popup), 'frontend' or 'background'
     ));
@@ -634,6 +635,13 @@ final class Unattached_Media_Manager
         // until the admin explicitly adds a table/column on the Settings page.
         if (is_array($settings) && ! isset($settings['scan_custom_tables'])) {
             $settings['scan_custom_tables'] = array();
+            update_option('unmam_settings', $settings);
+        }
+
+        // Lazy migration: 1.4.0 introduced scan_files. A missing key means an upgrade, and the
+        // theme and plugin file scan is on for those. A saved false stays false.
+        if (is_array($settings) && ! isset($settings['scan_files'])) {
+            $settings['scan_files'] = true;
             update_option('unmam_settings', $settings);
         }
 

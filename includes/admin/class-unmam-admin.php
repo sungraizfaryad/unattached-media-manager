@@ -733,7 +733,14 @@ class UNMAM_Admin {
                                 <label>
                                     <input type="checkbox" name="unmam_scan_options" value="1" <?php checked( $settings['scan_options'] ?? true ); ?>>
                                     <?php esc_html_e( 'Theme Options & Settings', 'unattached-media-manager' ); ?>
+                                </label><br>
+                                <label>
+                                    <input type="checkbox" name="unmam_scan_files" value="1" <?php checked( $settings['scan_files'] ?? true ); ?>>
+                                    <?php esc_html_e( 'Theme and plugin files', 'unattached-media-manager' ); ?>
                                 </label>
+                                <p class="description">
+                                    <?php esc_html_e( 'Finds images used in theme and plugin stylesheets, templates and code. Images a theme builds in code are not found.', 'unattached-media-manager' ); ?>
+                                </p>
                             </fieldset>
                         </td>
                     </tr>
@@ -1018,6 +1025,7 @@ class UNMAM_Admin {
             'scan_acf_fields'      => isset( $_POST['unmam_scan_acf_fields'] ),
             'scan_widgets'         => isset( $_POST['unmam_scan_widgets'] ),
             'scan_options'         => isset( $_POST['unmam_scan_options'] ),
+            'scan_files'           => isset( $_POST['unmam_scan_files'] ),
             'excluded_post_types'  => array( 'revision', 'nav_menu_item' ),
             'scan_post_types'      => $scan_post_types,
             // Saving means every type currently on offer has been shown to the admin and
@@ -1036,6 +1044,11 @@ class UNMAM_Admin {
         // phpcs:enable WordPress.Security.NonceVerification.Missing
 
         update_option( 'unmam_settings', $settings );
+
+        // Unticked: the file rows go now, so the images they credited show as unused without a reset scan.
+        if ( ! $settings['scan_files'] ) {
+            UNMAM_File_Scanner::clear();
+        }
 
         add_settings_error( 'unmam_settings', 'settings_saved', __( 'Settings saved.', 'unattached-media-manager' ), 'success' );
 
