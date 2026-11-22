@@ -52,6 +52,24 @@ add_filter( 'unmam_file_scan_batch_limits', function ( $limits ) use ( &$overrid
 	return array_merge( $limits, $override );
 } );
 
+// Runs $fn with every INSERT into the references table broken, so insert_reference() returns false.
+$with_inserts_refused = function ( $fn ) use ( $wpdb, $table ) {
+	$refuse = function ( $query ) use ( $table ) {
+		if ( 0 === strpos( ltrim( $query ), 'INSERT INTO `' . $table . '`' ) ) {
+			return str_replace( 'INSERT INTO', 'INSERT INTX', $query );
+		}
+		return $query;
+	};
+	$wpdb->suppress_errors( true );
+	add_filter( 'query', $refuse );
+	try {
+		$fn();
+	} finally {
+		remove_filter( 'query', $refuse );
+		$wpdb->suppress_errors( false );
+	}
+};
+
 $count_file_rows = function () use ( $wpdb, $table ) {
 	return (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table WHERE source_type = 'file'" );
 };
@@ -242,7 +260,9 @@ if ( 'settings' !== $mode ) {
 			$bad_row         = UNMAM_File_Scanner::write_reference( $theme_component, "css/caf\xE9.css", $fx['found']['badutf8'], array( 'type' => 'url', 'value' => "https://flp.local/caf\xE9.png" ) );
 			$bad_key         = $key_for( $fx['found']['badutf8'] );
 			$ok( UNMAM_Database::get_reference_count( $fx['found']['badutf8'] ) > 0 && $bad_row, 'bad utf8 name still credited' );
-			$ok( '' !== $bad_key && wp_check_invalid_utf8( $bad_key ) === $bad_key, 'bad utf8 name: stored key is valid utf8' );
+			$ok( 0 === strpos( $bad_key, $theme . '|' ) && false !== strpos( $bad_key, 'css/caf' ) && '.css' === substr( $bad_key, -4 ) && mb_check_encoding( $bad_key, 'UTF-8' ), 'bad utf8 name: stored key keeps the component and the readable path, and is valid utf8 (' . $bad_key . ')' );
+			$bad_value = (string) $wpdb->get_var( $wpdb->prepare( "SELECT reference_value FROM $table WHERE attachment_id = %d AND source_type = 'file' ORDER BY id LIMIT 1", $fx['found']['badutf8'] ) );
+			$ok( 0 === strpos( $bad_value, 'https://flp.local/caf' ) && '.png' === substr( $bad_value, -4 ) && mb_check_encoding( $bad_value, 'UTF-8' ), 'bad utf8 name: stored value keeps its readable text, and is valid utf8 (' . $bad_value . ')' );
 
 			$ok( 'theme:unmam-fixture-theme|parts/sidebar.html' === $key_for( $fx['found']['sidebar'] ), 'context_key format' );
 			$ok( 'theme_file' === $ctx_for( $fx['found']['sidebar'] ) && 'mu_plugin_file' === $ctx_for( $fx['found']['mu'] ), 'contexts' );
@@ -257,7 +277,22 @@ if ( 'settings' !== $mode ) {
 			$k = UNMAM_File_Scanner::context_key( 'theme:x', str_repeat( "\u{e9}", 300 ) . '.css' );
 			$ok( 255 === mb_strlen( $k ) && wp_check_invalid_utf8( $k ) === $k, 'context_key: multibyte path is cut by characters' );
 			$k = UNMAM_File_Scanner::context_key( "theme:caf\xE9", "a\xE9/b.css" );
-			$ok( '' !== $k && wp_check_invalid_utf8( $k ) === $k, 'context_key: invalid bytes are replaced' );
+			$ok( 0 === strpos( $k, 'theme:caf' ) && false !== strpos( $k, '|a' ) && '/b.css' === substr( $k, -6 ) && mb_check_encoding( $k, 'UTF-8' ), 'context_key: invalid bytes are replaced, the rest kept (' . $k . ')' );
+
+			// The scrub helper. It is private; the fallback tiers cannot be forced on this core, so
+			// mb_scrub()'s answer for the same bytes is pinned here as well.
+			$ok( method_exists( 'UNMAM_File_Scanner', 'scrub' ), 'scrub helper exists' );
+			if ( method_exists( 'UNMAM_File_Scanner', 'scrub' ) ) {
+				$scrub = new ReflectionMethod( 'UNMAM_File_Scanner', 'scrub' );
+				$scrub->setAccessible( true );
+				$s = $scrub->invoke( null, "css/caf\xE9.css" );
+				$ok( 0 === strpos( $s, 'css/caf' ) && '.css' === substr( $s, -4 ) && mb_check_encoding( $s, 'UTF-8' ), 'scrub: bad byte replaced, the rest kept (' . $s . ')' );
+				$ok( "ok/caf\u{e9}.css" === $scrub->invoke( null, "ok/caf\u{e9}.css" ), 'scrub: valid input comes back unchanged' );
+			}
+			if ( function_exists( 'mb_scrub' ) ) {
+				$m = mb_scrub( "css/caf\xE9.css", 'UTF-8' );
+				$ok( 'css/caf?.css' === $m, 'mb_scrub fallback: same bytes give css/caf?.css' );
+			}
 			$k = UNMAM_File_Scanner::context_key( 'plugin:' . str_repeat( 'c', 300 ), 'a.css' );
 			$ok( 255 >= mb_strlen( $k ), 'context_key: an oversized component key still fits' );
 
@@ -278,6 +313,13 @@ if ( 'settings' !== $mode ) {
 			$wpdb->suppress_errors( false );
 			$ok( ! $refuse_once && $retry_row > 0 && $theme . '|#' . md5( 'css/retry.css' ) === $key_for( $spare_img ), 'refused insert: retried once under component|#md5(path)' );
 			$wpdb->delete( $table, array( 'attachment_id' => $spare_img, 'source_type' => 'file' ), array( '%d', '%s' ) );
+
+			// Both the insert and its retry refused: no row, and the caller is told.
+			$both = null;
+			$with_inserts_refused( function () use ( &$both, $theme_component, $spare_img ) {
+				$both = UNMAM_File_Scanner::write_reference( $theme_component, 'css/refused.css', $spare_img, array( 'type' => 'id', 'value' => $spare_img ) );
+			} );
+			$ok( false === $both && 0 === $file_rows_for( $spare_img ), 'both inserts refused: write_reference returns false and writes nothing' );
 
 			$deep_rel = '';
 			foreach ( $fx['paths'] as $path ) {
@@ -393,9 +435,16 @@ if ( 'settings' !== $mode ) {
 			$start_at_fixture( array( 'files' => 1 ) );
 			$state         = $state_of();
 			$state['path'] = "css/caf\xE9.css";
+			$state['skipped'][] = array( 'key' => $theme, 'path' => "css/caf\xE9.css", 'reason' => 'unreadable' );
+			$state['skipped_total']++;
 			$save_state->invoke( null, $state );
 			$stored = get_option( UNMAM_File_Scanner::STATE_OPTION );
 			$ok( is_array( $stored ) && "\0" === substr( $stored['path'], 0, 1 ), 'bad-name cursor: saved, packed behind a NUL byte' );
+			$bad_items = array_filter( UNMAM_File_Scanner::skipped()['items'], function ( $item ) {
+				return 0 === strpos( $item['path'], 'css/caf' );
+			} );
+			$bad_item  = $bad_items ? reset( $bad_items ) : array( 'path' => '' );
+			$ok( '.css' === substr( $bad_item['path'], -4 ) && mb_check_encoding( $bad_item['path'], 'UTF-8' ), 'bad-name skipped path: readable and valid utf8 (' . $bad_item['path'] . ')' );
 			$after = $one_batch();
 			$ok( 'css/rel.css' === $after['path'], 'bad-name cursor: the next batch resumed after it (css/rel.css)' );
 
@@ -426,6 +475,38 @@ if ( 'settings' !== $mode ) {
 			} ), 'path' );
 			$ok( in_array( 'data/many.json', $stopped, true ), 'third attempt skips, mid-file: the cursor file is reported as stopped' );
 			$ok( 'data/many.json' !== $after['path'] || 0 === $after['candidate'], 'third attempt skips, mid-file: the cursor left the file' );
+
+			echo "-- fifth attempt skips the component\n";
+			$start_at_fixture( array( 'files' => 1 ) );
+			$state               = $state_of();
+			$theme_index         = $state['index'];
+			$state['attempt_at'] = $state['index'] . '|' . $state['path'] . '|' . $state['candidate'];
+			$state['attempts']   = 4;
+			update_option( UNMAM_File_Scanner::STATE_OPTION, $state, false );
+			$after   = $one_batch();
+			$stopped = array_filter( UNMAM_File_Scanner::skipped()['items'], function ( $item ) use ( $theme ) {
+				return 'stopped' === $item['reason'] && $theme === $item['key'] && '' === $item['path'];
+			} );
+			$ok( (bool) $stopped, 'fifth attempt skips the component: reported as stopped, keyed to the theme' );
+			$ok( $after['index'] > $theme_index && 0 === $after['attempts'], 'fifth attempt skips the component: moved to the next one, attempts cleared' );
+			$ok( 0 === $file_rows_for( $fx['found']['n10a'] ) && 0 === $file_rows_for( $fx['found']['n10b'] ) && 0 === $file_rows_for( $fx['found']['cssabs'] ) && 0 === $file_rows_for( $fx['found']['sidebar'] ), 'fifth attempt skips the component: none of its files were read, not even the first ones in order' );
+
+			echo "-- a find that cannot be written\n";
+			$start_at_fixture( array() );
+			$refs_before = $state_of()['refs'];
+			$override    = array();
+			$finished    = false;
+			$with_inserts_refused( function () use ( &$finished, $finish ) {
+				$finished = $finish();
+			} );
+			$state_now = $state_of();
+			$unwritten = array_filter( UNMAM_File_Scanner::skipped()['items'], function ( $item ) use ( $theme ) {
+				return 'unreadable' === $item['reason'] && $theme === $item['key'] && 'style.css' === $item['path'];
+			} );
+			$ok( $finished, 'a find that cannot be written: pass finishes' );
+			$ok( (bool) $unwritten, 'a find that cannot be written: the file is reported as unreadable' );
+			$ok( $refs_before === $state_now['refs'], 'a find that cannot be written: not counted in refs' );
+			$ok( 0 === $file_rows_for( $fx['found']['cssabs'] ), 'a find that cannot be written: no row' );
 
 			echo "-- rescan without reset\n";
 			$rel      = "$root/css/rel.css";
@@ -505,12 +586,14 @@ try {
 	$set_settings( array( 'scan_files' => true ) );
 	$ok( $build_rows() && $count_file_rows() > 0, 'precondition: a files pass left file rows' );
 	$ok( UNMAM_Database::get_reference_count( $fx['found']['sidebar'] ) > 0, 'precondition: the sidebar image is credited' );
+	$ok( (int) get_option( 'unmam_files_scanned_at' ) > 0, 'precondition: the completed pass stored its time' );
 
 	// Untick through the settings form.
 	$save( $form );
 	$ok( false === Unattached_Media_Manager::get_setting( 'scan_files' ), 'untick: saved as false' );
 	$ok( 0 === $count_file_rows(), 'untick: file rows gone at once' );
 	$ok( false === get_option( UNMAM_File_Scanner::STATE_OPTION ), 'untick: state gone' );
+	$ok( false === get_option( 'unmam_files_scanned_at' ), 'untick: the last-scanned time is gone' );
 	$ok( ! in_array( 'files', UNMAM_Scanner::get_active_scan_types(), true ), 'untick: files not in the chain' );
 	$ok( 0 === UNMAM_Database::get_reference_count( $fx['found']['sidebar'] ), 'untick: the sidebar image is unused again' );
 
@@ -521,10 +604,12 @@ try {
 	$override = array( 'files' => 3 );
 	$scanner->run_batch( 'files' );
 	$ok( false !== get_option( UNMAM_File_Scanner::STATE_OPTION ) && 'running' === UNMAM_Database::get_scan_progress( 'files' )['status'], 'mid-pass: the step is running with state' );
+	update_option( 'unmam_files_scanned_at', time(), false );
 	$set_settings( array( 'scan_files' => false ) );
 	$override = array();
 	$result   = $scanner->run_batch( 'files' );
 	$ok( 'completed' === $result['status'], 'mid-pass untick: one files batch returns completed' );
+	$ok( false === get_option( 'unmam_files_scanned_at' ), 'mid-pass untick: the last-scanned time is gone' );
 	$ok( 0 === $count_file_rows() && false === get_option( UNMAM_File_Scanner::STATE_OPTION ), 'mid-pass untick: rows and state cleared' );
 	$ok( 'completed' === UNMAM_Database::get_scan_progress( 'files' )['status'], 'mid-pass untick: progress row completed' );
 

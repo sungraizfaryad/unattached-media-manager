@@ -35,6 +35,7 @@ class UNMAM_File_Scanner {
     const STATE_OPTION = 'unmam_file_scan_state';
     const SKIPPED_KEPT = 100;
     const MAX_ATTEMPTS = 3;
+    const MAX_COMPONENT_ATTEMPTS = 5;
 
     /**
      * Byte ranges to read for a file of this size.
@@ -195,13 +196,14 @@ class UNMAM_File_Scanner {
     }
 
     /**
-     * Delete every file reference and the scan state.
+     * Delete every file reference, the scan state and the time of the last completed pass.
      */
     public static function clear(): void {
         foreach ( self::CONTEXTS as $context ) {
             UNMAM_Database::delete_references_by_source_and_context( 'file', $context );
         }
         delete_option( self::STATE_OPTION );
+        delete_option( 'unmam_files_scanned_at' );
     }
 
     /**
@@ -223,8 +225,8 @@ class UNMAM_File_Scanner {
         $items = array();
         foreach ( $state['skipped'] as $item ) {
             $items[] = array(
-                'key'    => wp_check_invalid_utf8( $item['key'], true ),
-                'path'   => wp_check_invalid_utf8( $item['path'], true ),
+                'key'    => self::scrub( $item['key'] ),
+                'path'   => self::scrub( $item['path'] ),
                 'reason' => $item['reason'],
             );
         }
@@ -247,8 +249,8 @@ class UNMAM_File_Scanner {
      * @return string
      */
     public static function context_key( string $component_key, string $relative_path ): string {
-        $component_key = wp_check_invalid_utf8( $component_key, true );
-        $relative_path = wp_check_invalid_utf8( $relative_path, true );
+        $component_key = self::scrub( $component_key );
+        $relative_path = self::scrub( $relative_path );
 
         $key = $component_key . '|' . $relative_path;
         if ( mb_strlen( $key, 'UTF-8' ) <= 255 ) {
@@ -262,6 +264,29 @@ class UNMAM_File_Scanner {
         }
 
         return $head . mb_substr( $relative_path, -$room, null, 'UTF-8' );
+    }
+
+    /**
+     * Replace the invalid UTF-8 bytes in a string that came off the disk.
+     *
+     * wp_check_invalid_utf8( $s, true ) cannot be used on its own: before WP 6.9 its strip branch
+     * is a bare iconv(), which returns false (and a notice) on invalid input, so a bad file
+     * name came out empty.
+     */
+    private static function scrub( string $text ): string {
+        if ( function_exists( 'wp_scrub_utf8' ) ) {
+            return wp_scrub_utf8( $text );
+        }
+        if ( function_exists( 'mb_scrub' ) ) {
+            return mb_scrub( $text, 'UTF-8' );
+        }
+
+        $clean = wp_check_invalid_utf8( $text, true );
+        if ( ! is_string( $clean ) ) {
+            // No mbstring and an old core: keep the ASCII and mark the rest.
+            $clean = (string) preg_replace( '/[^\x20-\x7E]/', '?', $text );
+        }
+        return $clean;
     }
 
     /**
@@ -287,12 +312,12 @@ class UNMAM_File_Scanner {
             'context_label'   => self::context_label( $context ),
             'reference_type'  => 'id' === $candidate['type'] ? 'id' : 'url',
             // A matched URL cannot be this long in practice; the cap keeps one odd value from sinking the row.
-            'reference_value' => wp_check_invalid_utf8( substr( (string) $candidate['value'], 0, 4096 ), true ),
+            'reference_value' => self::scrub( substr( (string) $candidate['value'], 0, 4096 ) ),
         );
 
         $id = UNMAM_Database::insert_reference( $row );
         if ( false === $id ) {
-            $stem               = mb_substr( wp_check_invalid_utf8( $component['key'], true ), 0, 200, 'UTF-8' );
+            $stem               = mb_substr( self::scrub( $component['key'] ), 0, 200, 'UTF-8' );
             $row['context_key'] = $stem . '|#' . md5( $relative_path );
             $id                 = UNMAM_Database::insert_reference( $row );
         }
@@ -348,7 +373,9 @@ class UNMAM_File_Scanner {
             'entries' => 0,
         );
 
-        if ( $state['attempts'] >= self::MAX_ATTEMPTS ) {
+        if ( $state['attempts'] >= self::MAX_COMPONENT_ATTEMPTS ) {
+            self::skip_stuck_component( $state );
+        } elseif ( $state['attempts'] >= self::MAX_ATTEMPTS ) {
             self::skip_stuck_file( $state, $budget['limits'] );
         }
 
@@ -519,6 +546,22 @@ class UNMAM_File_Scanner {
     }
 
     /**
+     * The fifth time a batch starts on the same spot, even skipping a file did not help, which
+     * means the walk itself is what dies (a folder too big to list, say). Give up on the rest
+     * of this component and move to the next.
+     */
+    private static function skip_stuck_component( array &$state ): void {
+        if ( isset( $state['components'][ $state['index'] ] ) ) {
+            self::note_skipped( $state, $state['components'][ $state['index'] ]['key'], $state['path'], 'stopped' );
+            self::next_component( $state );
+        }
+
+        $state['attempts']   = 0;
+        $state['attempt_at'] = '';
+        self::save_state( $state );
+    }
+
+    /**
      * Read files from the cursor on until the budget runs out or the last component is done.
      */
     private static function scan_components( array &$state, array &$budget ): void {
@@ -627,8 +670,12 @@ class UNMAM_File_Scanner {
             $budget['units']++;
 
             if ( $attachment_id ) {
-                self::write_reference( $component, $relative, $attachment_id, $candidates[ $i ] );
-                $state['refs']++;
+                if ( false === self::write_reference( $component, $relative, $attachment_id, $candidates[ $i ] ) ) {
+                    // Not credited, so say so; otherwise the image would read as unused with no hint why.
+                    self::note_skipped( $state, $component['key'], $relative, 'unreadable' );
+                } else {
+                    $state['refs']++;
+                }
             }
 
             if ( $i + 1 < $total && 0 === ( $i + 1 - $from ) % 50 ) {
