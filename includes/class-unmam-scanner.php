@@ -90,6 +90,9 @@ class UNMAM_Scanner {
         // Meta parser (generic postmeta)
         $this->parsers['meta'] = new UNMAM_Meta_Parser();
 
+        // Additional CSS and Site Editor styles. Returns nothing for any other post type.
+        $this->parsers['design'] = new UNMAM_Design_Parser();
+
         // Options parser
         if ( ! empty( $settings['scan_options'] ) ) {
             $this->parsers['options'] = new UNMAM_Options_Parser();
@@ -315,6 +318,13 @@ class UNMAM_Scanner {
         // Clear existing references for this post
         UNMAM_Database::delete_references_by_source( $post_id, 'post' );
 
+        // Saved design for a theme that has been deleted can't show anywhere. Its rows were
+        // just cleared, which is the point.
+        $is_design = UNMAM_Design_Content::is_design_type( $post->post_type );
+        if ( $is_design && ! UNMAM_Design_Content::is_installed( UNMAM_Design_Content::theme_of( $post_id, $post->post_type ) ) ) {
+            return;
+        }
+
         $references = array();
         $settings   = Unattached_Media_Manager::get_setting();
 
@@ -356,7 +366,8 @@ class UNMAM_Scanner {
         }
 
         // Auto-attach feature: Update post_parent for found attachments
-        if ( ! empty( $settings['auto_attach'] ) && ! empty( $attachment_ids ) ) {
+        // A template or a stylesheet is not a page an image can belong to.
+        if ( ! empty( $settings['auto_attach'] ) && ! empty( $attachment_ids ) && ! $is_design ) {
             $this->auto_attach_media( $attachment_ids );
         }
 

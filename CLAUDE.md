@@ -65,6 +65,22 @@ rsync -a --delete \
 - **Terms are never auto-attached.** A term is not a post.
 - Known limit: a pre-4.2 shared `term_id` present in two selected taxonomies can straddle a batch boundary and lose the second row. Accepted; split terms have been the default since 2015.
 
+**Design content (1.3.3)**
+
+- `custom_css`, `wp_template`, `wp_template_part` and `wp_global_styles` are scanned as ordinary post types. `unmam_design_post_types()` is the one list; it is a plain function because activation builds default settings before classes load.
+- Rows are `source_type` `post`, so every place that excludes design posts does it by post type: `index_post()` (no auto-attach, deleted-theme skip) and `UNMAM_Database::design_source_clause()` in the four attach queries plus the used-but-unattached count in `get_statistics()`. A new attach query needs the clause too.
+- Put the clause in a variable and interpolate it. Concatenating `self::design_source_clause()` into the SQL raises a Plugin Check `NotPrepared` error per use.
+- A design post whose theme is not installed is skipped after its rows are cleared. An unknown theme counts as installed.
+- Edit links only for the active theme: core builds template edit links from `get_stylesheet()`.
+- `UNMAM_Design_Parser` only reads `custom_css` and `wp_global_styles`. Templates and parts go through the content and block parsers.
+- `extract_from_text( $text, true )` also matches root- and protocol-relative upload URLs. Only the design parser passes `true`; 1.4.0's file scan should too.
+
+**Replace Media**
+
+- Anything saved through `wp_insert_post()`, `update_post_meta()` or `update_term_meta()` must be `wp_slash()`ed. They unslash their input, and without it every backslash in content and JSON meta was lost before 1.3.3.
+- `replace_in_meta()` never instantiates classes when unserializing, and leaves a value holding an object untouched.
+- `wp-image-{ID}` replacement is anchored. A plain `str_replace()` turned `wp-image-123` into `wp-image-<new>3` when replacing 12.
+
 **Reference extraction**
 
 - **`UNMAM_Reference_Extractor` is the only copy of the "find media in a text blob" regex.** The custom-table parser, the meta parser's last-resort branch and the ACF text-field bucket all call it, and 1.4.0's filesystem scan should too. Do not write a fourth copy.

@@ -4,7 +4,7 @@
  * Plugin Name: Unattached Media Manager
  * Plugin URI: https://wordpress.org/plugins/unattached-media-manager/
  * Description: Fix the WordPress Unattached media filter. Automatically attach used media files to their posts so you can safely clean up your library.
- * Version: 1.3.2
+ * Version: 1.3.3
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author: Sungraiz Faryad
@@ -38,6 +38,20 @@ function unmam_default_scan_post_types()
 }
 
 /**
+ * Core post types that hold theme design saved through WordPress itself: Additional CSS,
+ * Site Editor templates and parts, and Site Editor styles.
+ *
+ * Kept as a plain function rather than a class constant because the activation hook builds
+ * the default settings before the plugin's classes are loaded.
+ *
+ * @return string[]
+ */
+function unmam_design_post_types()
+{
+    return array('custom_css', 'wp_template', 'wp_template_part', 'wp_global_styles');
+}
+
+/**
  * Post types that may be offered for scanning.
  *
  * Filtering on public => true alone missed two important groups. Builder template types
@@ -50,9 +64,12 @@ function unmam_default_scan_post_types()
  */
 function unmam_get_scannable_post_type_candidates()
 {
+    // The design types are neither public nor show_ui, so the two queries never see them.
+    // post_type_exists() because 5.8 has no template parts or global styles.
     $types = array_unique(array_merge(
         get_post_types(array('public' => true), 'names'),
-        get_post_types(array('show_ui' => true), 'names')
+        get_post_types(array('show_ui' => true), 'names'),
+        array_filter(unmam_design_post_types(), 'post_type_exists')
     ));
 
     // Attachments are the media itself, not a place media is referenced from. The rest
@@ -108,7 +125,7 @@ function unmam_get_scannable_taxonomy_candidates()
 }
 
 // Plugin constants
-define('UNMAM_VERSION', '1.3.2');
+define('UNMAM_VERSION', '1.3.3');
 define('UNMAM_PLUGIN_FILE', __FILE__);
 define('UNMAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('UNMAM_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -223,6 +240,7 @@ final class Unattached_Media_Manager
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-history.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-database.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-reference-extractor.php';
+        require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-design-content.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-resource-monitor.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-scanner.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-attachment-manager.php';
@@ -243,6 +261,7 @@ final class Unattached_Media_Manager
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-woocommerce-parser.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-seo-parser.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-custom-table-parser.php';
+        require_once UNMAM_PLUGIN_DIR . 'includes/parsers/class-unmam-design-parser.php';
 
         // Admin
         if (is_admin()) {

@@ -81,6 +81,24 @@ The fixture taxonomy `unmam_tax` is registered by the harness mu-plugin *after* 
 first stored, so it also exercises the taxonomy reconciliation: it must be scanned without
 anyone opening the Settings page.
 
+## Design content fixture (1.3.3)
+
+Needs a block theme active and `genesis-block-theme` installed but inactive (true on FLP).
+
+```bash
+dev/flpwp.sh eval-file dev/fixture/design-seed.php
+dev/flpwp.sh eval-file dev/fixture/design-check.php          # indexes directly, auto-attach on
+dev/flpwp.sh eval-file dev/fixture/design-teardown.php
+dev/flpwp.sh eval-file dev/fixture/design-seed.php
+dev/flpwp.sh unmam scan --reset --batch-size=200
+dev/flpwp.sh eval-file dev/fixture/design-check.php noindex  # batch path
+dev/flpwp.sh eval-file dev/fixture/design-teardown.php
+dev/flpwp.sh eval-file dev/fixture/design-upgrade-check.php  # restores settings itself
+dev/flpwp.sh eval-file dev/fixture/replace-slash.php         # cleans up itself
+```
+
+The seed appends to the active theme's Additional CSS and teardown restores it. The fixture global styles post is dated 2000 so a real one keeps winning core's newest-first lookup.
+
 ## Admin UI without a browser
 
 Playwright is often unavailable. Generating a WordPress auth cookie is enough to fetch and
@@ -171,4 +189,5 @@ dev/flpwp.sh plugin check unattached-media-manager --require=dev/plugin-check.ph
 
 Compare against the previous tag rather than reading the list cold: `git archive <tag>` into a
 temp dir, sync that, run the same command, and diff the counts per code. 1.3.1 and 1.3.2 both
-show 279 rows and the same four `PreparedSQL.NotPrepared` errors listed in `ROADMAP.md`.
+show 279 rows and the same four `PreparedSQL.NotPrepared` errors listed in `ROADMAP.md`. So
+does 1.3.3.

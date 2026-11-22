@@ -438,6 +438,11 @@ class UNMAM_Database {
         }
 
         if ( 'post' === $source_type ) {
+            $source_post = get_post( $source_id );
+            if ( $source_post && UNMAM_Design_Content::is_design_type( $source_post->post_type ) ) {
+                return UNMAM_Design_Content::describe( $source_post );
+            }
+
             $title = get_the_title( $source_id );
 
             if ( ! $title ) {
@@ -501,6 +506,21 @@ class UNMAM_Database {
             )
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+    }
+
+    /**
+     * Keeps design posts out of attach suggestions. Correlates on the references alias `r`.
+     *
+     * The type names are a fixed list from code, never user input.
+     *
+     * @return string
+     */
+    private static function design_source_clause() {
+        global $wpdb;
+
+        $types = "'" . implode( "','", array_map( 'esc_sql', unmam_design_post_types() ) ) . "'";
+
+        return " AND r.source_id NOT IN (SELECT ID FROM {$wpdb->posts} WHERE post_type IN ({$types}))";
     }
 
     /**
@@ -1136,6 +1156,7 @@ class UNMAM_Database {
 
         // Used but unattached (in our references table but post_parent = 0)
         // Must have source_id > 0 and source_type = 'post' to be attachable
+        $design_clause       = self::design_source_clause();
         $used_but_unattached = (int) $wpdb->get_var(
             "SELECT COUNT(DISTINCT r.attachment_id)
             FROM {$table} r
@@ -1143,7 +1164,7 @@ class UNMAM_Database {
             WHERE p.post_type = 'attachment'
             AND p.post_parent = 0
             AND r.source_id > 0
-            AND r.source_type = 'post'"
+            AND r.source_type = 'post'{$design_clause}"
         );
 
         // References by context type
@@ -1179,7 +1200,8 @@ class UNMAM_Database {
     public static function get_used_but_unattached() {
         global $wpdb;
 
-        $table = self::get_table_name( 'references' );
+        $table         = self::get_table_name( 'references' );
+        $design_clause = self::design_source_clause();
 
         // Get all attachments that are used but have post_parent = 0
         // Also get the first source_id from our references to suggest as parent
@@ -1194,7 +1216,7 @@ class UNMAM_Database {
             WHERE p.post_type = 'attachment'
             AND p.post_parent = 0
             AND r.source_id > 0
-            AND r.source_type = 'post'
+            AND r.source_type = 'post'{$design_clause}
             GROUP BY p.ID, p.post_title
             ORDER BY p.ID ASC",
             ARRAY_A
@@ -1212,7 +1234,8 @@ class UNMAM_Database {
     public static function get_used_but_unattached_count() {
         global $wpdb;
 
-        $table = self::get_table_name( 'references' );
+        $table         = self::get_table_name( 'references' );
+        $design_clause = self::design_source_clause();
 
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are safely generated
         $count = (int) $wpdb->get_var(
@@ -1222,7 +1245,7 @@ class UNMAM_Database {
             WHERE p.post_type = 'attachment'
             AND p.post_parent = 0
             AND r.source_id > 0
-            AND r.source_type = 'post'"
+            AND r.source_type = 'post'{$design_clause}"
         );
         // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
@@ -1511,6 +1534,8 @@ class UNMAM_Database {
         $offset = ( $args['page'] - 1 ) * $args['per_page'];
         $table  = self::get_table_name( 'references' );
 
+        $design_clause = self::design_source_clause();
+
         // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are safely generated
 
         // Get total count
@@ -1521,7 +1546,7 @@ class UNMAM_Database {
             WHERE p.post_type = 'attachment'
             AND p.post_parent = 0
             AND r.source_id > 0
-            AND r.source_type = 'post'"
+            AND r.source_type = 'post'{$design_clause}"
         );
 
         // Get items with pagination
@@ -1538,7 +1563,7 @@ class UNMAM_Database {
                 WHERE p.post_type = 'attachment'
                 AND p.post_parent = 0
                 AND r.source_id > 0
-                AND r.source_type = 'post'
+                AND r.source_type = 'post'{$design_clause}
                 GROUP BY p.ID, p.post_title, p.post_mime_type, p.post_date
                 ORDER BY p.ID DESC
                 LIMIT %d OFFSET %d",

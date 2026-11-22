@@ -224,10 +224,11 @@ class UNMAM_Attachment_Manager {
                     $new_content = $this->replace_in_content( $post->post_content, $old_attachment_id, $new_attachment_id, $old_urls, $new_url );
                     if ( $new_content !== $post->post_content ) {
                         if ( ! $dry_run ) {
-                            wp_update_post( array(
+                            // wp_insert_post() unslashes its input.
+                            wp_update_post( wp_slash( array(
                                 'ID'           => $ref['source_id'],
                                 'post_content' => $new_content,
-                            ) );
+                            ) ) );
                         }
                         $result['success'] = true;
                         $result['action']  = 'updated_content';
@@ -242,7 +243,7 @@ class UNMAM_Attachment_Manager {
                     $new_meta = $this->replace_in_meta( $meta_value, $old_attachment_id, $new_attachment_id, $old_urls, $new_url );
                     if ( $new_meta !== $meta_value ) {
                         if ( ! $dry_run ) {
-                            update_post_meta( $ref['source_id'], $ref['context_key'], $new_meta );
+                            update_post_meta( $ref['source_id'], $ref['context_key'], wp_slash( $new_meta ) );
                         }
                         $result['success'] = true;
                         $result['action']  = 'updated_meta';
@@ -257,7 +258,7 @@ class UNMAM_Attachment_Manager {
                     $new_meta = $this->replace_in_meta( $meta_value, $old_attachment_id, $new_attachment_id, $old_urls, $new_url );
                     if ( $new_meta !== $meta_value ) {
                         if ( ! $dry_run ) {
-                            update_term_meta( $ref['source_id'], $ref['context_key'], $new_meta );
+                            update_term_meta( $ref['source_id'], $ref['context_key'], wp_slash( $new_meta ) );
                         }
                         $result['success'] = true;
                         $result['action']  = 'updated_meta';
@@ -305,10 +306,10 @@ class UNMAM_Attachment_Manager {
             $content
         );
 
-        // Replace in class attributes (wp-image-XXX)
-        $content = str_replace(
-            'wp-image-' . $old_attachment_id,
-            'wp-image-' . $new_attachment_id,
+        // Anchored, so replacing 12 leaves wp-image-123 alone.
+        $content = preg_replace(
+            '/\bwp-image-' . (int) $old_attachment_id . '(?!\d)/',
+            'wp-image-' . (int) $new_attachment_id,
             $content
         );
 
@@ -339,9 +340,15 @@ class UNMAM_Attachment_Manager {
         }
 
         if ( is_string( $value ) ) {
-            // Check if it's a serialized value
-            $unserialized = @unserialize( $value );
-            if ( false !== $unserialized ) {
+            if ( is_serialized( $value ) ) {
+                // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize -- classes are never instantiated
+                $unserialized = @unserialize( trim( $value ), array( 'allowed_classes' => false ) );
+
+                // Re-serializing an object here would save it back as __PHP_Incomplete_Class.
+                if ( false === $unserialized || $this->contains_object( $unserialized ) ) {
+                    return $value;
+                }
+
                 $replaced = $this->replace_in_meta( $unserialized, $old_attachment_id, $new_attachment_id, $old_urls, $new_url );
                 return serialize( $replaced );
             }
@@ -371,6 +378,26 @@ class UNMAM_Attachment_Manager {
         }
 
         return $value;
+    }
+
+    /**
+     * @param mixed $value
+     * @return bool
+     */
+    private function contains_object( $value ) {
+        if ( is_object( $value ) ) {
+            return true;
+        }
+
+        if ( is_array( $value ) ) {
+            foreach ( $value as $item ) {
+                if ( $this->contains_object( $item ) ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

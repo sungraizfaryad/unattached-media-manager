@@ -28,6 +28,11 @@ class UNMAM_Reference_Extractor {
     const MAX_TEXT_LENGTH = 1048576; // 1MB.
 
     /**
+     * File extensions treated as media when matching URLs.
+     */
+    const MEDIA_EXTENSIONS = 'jpe?g|png|gif|webp|svg|bmp|ico|avif|mp4|m4v|webm|ogg|ogv|mp3|wav|m4a|pdf|docx?|pptx?|xlsx?|zip';
+
+    /**
      * Cheap pre-filter: does this string contain anything worth regex-scanning?
      *
      * Not a matcher on its own. Callers should still validate whatever
@@ -50,10 +55,13 @@ class UNMAM_Reference_Extractor {
      * Detects both `wp-image-{ID}` editor classes and uploaded-media URLs,
      * resolving URLs to attachment IDs via the shared resolver.
      *
-     * @param mixed $text Text to scan.
-     * @return array      Map of attachment_id => matched URL (string) or attachment_id (int).
+     * @param mixed $text           Text to scan.
+     * @param bool  $allow_relative Also match `/wp-content/uploads/...` and `//host/...`
+     *                              forms, which CSS often uses. Off for every caller except
+     *                              the design parser, so their results don't change.
+     * @return array Map of attachment_id => matched URL (string) or attachment_id (int).
      */
-    public static function extract_from_text( $text ) {
+    public static function extract_from_text( $text, $allow_relative = false ) {
         $results = array();
 
         if ( ! is_string( $text ) || '' === $text || strlen( $text ) > self::MAX_TEXT_LENGTH ) {
@@ -72,7 +80,7 @@ class UNMAM_Reference_Extractor {
         }
 
         // 2. Direct media URLs.
-        $url_re = '#https?://[^\s"\'<>()]+?\.(?:jpe?g|png|gif|webp|svg|bmp|ico|avif|mp4|m4v|webm|ogg|ogv|mp3|wav|m4a|pdf|docx?|pptx?|xlsx?|zip)#i';
+        $url_re = '#https?://[^\s"\'<>()]+?\.(?:' . self::MEDIA_EXTENSIONS . ')#i';
         if ( preg_match_all( $url_re, $text, $url_matches ) ) {
             foreach ( array_unique( $url_matches[0] ) as $url ) {
                 $attachment_id = UNMAM_Database::url_to_attachment_id( $url );
@@ -82,6 +90,49 @@ class UNMAM_Reference_Extractor {
             }
         }
 
+        if ( $allow_relative ) {
+            foreach ( self::relative_upload_urls( $text ) as $url ) {
+                $attachment_id = (int) UNMAM_Database::url_to_attachment_id( $url );
+                if ( $attachment_id && ! isset( $results[ $attachment_id ] ) ) {
+                    $results[ $attachment_id ] = $url;
+                }
+            }
+        }
+
         return $results;
+    }
+
+    /**
+     * Upload URLs written without a scheme or host, made absolute.
+     *
+     * The lookbehind keeps this off the tail of an absolute URL, which the main pattern
+     * has already handled.
+     *
+     * @param string $text
+     * @return string[]
+     */
+    private static function relative_upload_urls( $text ) {
+        $baseurl = untrailingslashit( wp_get_upload_dir()['baseurl'] );
+        $path    = untrailingslashit( (string) wp_parse_url( $baseurl, PHP_URL_PATH ) );
+
+        // Uploads served from a domain root leave nothing to anchor on.
+        if ( '' === $path ) {
+            return array();
+        }
+
+        $re = '#(?<![\w.:/-])(?://[^\s"\'<>()/]+)?' . preg_quote( $path, '#' ) . '/[^\s"\'<>()]+?\.(?:' . self::MEDIA_EXTENSIONS . ')#i';
+        if ( ! preg_match_all( $re, $text, $matches ) ) {
+            return array();
+        }
+
+        $origin = substr( $baseurl, 0, -strlen( $path ) );
+        $scheme = (string) wp_parse_url( $baseurl, PHP_URL_SCHEME );
+
+        $urls = array();
+        foreach ( array_unique( $matches[0] ) as $found ) {
+            $urls[] = 0 === strpos( $found, '//' ) ? $scheme . ':' . $found : $origin . $found;
+        }
+
+        return $urls;
     }
 }

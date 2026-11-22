@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.2
+Stable tag: 1.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -353,6 +353,16 @@ Your parser should implement the `UNMAM_Parser_Interface`.
 
 == Changelog ==
 
+= 1.3.3 =
+**Finds images used in your theme's design settings.**
+
+* **Images used only in Additional CSS, an edited template or template part, or Site Editor styles are now found.** They used to be listed as unused. Saved design from every installed theme counts; design left behind by a deleted theme does not.
+* Where Used names the place and the theme, for example "Template part: Sidebar (Twenty Twenty-Five)", with an edit link when it belongs to the active theme.
+* Images are never attached to these, since a stylesheet or a template is not a page.
+* **Replace Media no longer removes backslashes from content it updates.** Blocks that keep quotes or symbols in their settings, code samples, and JSON stored in custom fields could be damaged.
+* **Replace Media no longer touches the wrong image.** Replacing image 12 also changed the tag of image 123, or any other image whose number started with 12, on the same page.
+* Images used only in theme files (stylesheets or templates that were never edited in the Site Editor) are still not detected. That is planned.
+
 = 1.3.2 =
 **You can now search the trash.**
 
@@ -481,6 +491,9 @@ This release is mostly about the accuracy of the Unused list, in both directions
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.3.3 =
+Images used only in Additional CSS or the Site Editor could be listed as unused. Run a full scan after updating. Also fixes two Replace Media bugs: it removed backslashes from content, and replacing one image could change the tag of another whose number started the same way.
 
 = 1.3.2 =
 Adds search to the Trash view, and shows the date WordPress will permanently delete each trashed file.
