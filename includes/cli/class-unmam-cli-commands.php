@@ -235,7 +235,7 @@ class UNMAM_CLI_Commands {
                 'attachment_id'   => $attachment_id,
                 'attachment_title' => $attachment->post_title,
                 'total_references' => $total,
-                'references'       => $references,
+                'references'       => array_map( array( 'UNMAM_File_Scanner', 'without_details' ), $references ),
             ), JSON_PRETTY_PRINT ) );
             return;
         }
@@ -255,12 +255,13 @@ class UNMAM_CLI_Commands {
         foreach ( $references as $ref ) {
             $source       = UNMAM_Database::describe_source( $ref );
             $source_title = $source ? $source['title'] : $ref['context_key'];
+            $shown        = UNMAM_File_Scanner::without_details( $ref );
 
             $table_data[] = array(
                 'Source ID'    => $ref['source_id'],
                 'Source'       => $source_title,
                 'Context'      => $ref['context_type'],
-                'Field/Key'    => $ref['context_key'],
+                'Field/Key'    => isset( $shown['context_key'] ) ? $shown['context_key'] : '',
                 'Ref Type'     => $ref['reference_type'],
             );
         }

@@ -238,6 +238,160 @@ class UNMAM_File_Scanner {
     }
 
     /**
+     * Whether the current user may see which theme and plugin files use an image.
+     *
+     * The full list is an inventory of installed and inactive plugins. WP-CLI counts as
+     * trusted only when it runs as no user, which is the shell default.
+     */
+    public static function can_see_details(): bool {
+        return current_user_can( 'activate_plugins' )
+            || ( defined( 'WP_CLI' ) && WP_CLI && 0 === get_current_user_id() );
+    }
+
+    /**
+     * A usage row with the parts that name a theme or plugin file taken out, unless the user
+     * may see them. Other rows come back as they were.
+     */
+    public static function without_details( array $ref ): array {
+        if ( isset( $ref['source_type'] ) && 'file' === $ref['source_type'] && ! self::can_see_details() ) {
+            unset( $ref['context_key'], $ref['reference_value'] );
+        }
+
+        return $ref;
+    }
+
+    /**
+     * Installed plugins keyed by folder, or by file name for a single-file plugin.
+     *
+     * Read once per request. plugin.php is not loaded on every kind of request, so it is pulled in here.
+     *
+     * @return array Key => the get_plugins() header data of its first plugin file, plus 'files',
+     *               the plugin basenames found under that key.
+     */
+    public static function installed_plugins(): array {
+        static $plugins = null;
+
+        if ( null === $plugins ) {
+            if ( ! function_exists( 'get_plugins' ) ) {
+                require_once ABSPATH . 'wp-admin/includes/plugin.php';
+            }
+
+            $plugins = array();
+            foreach ( get_plugins() as $file => $data ) {
+                $key = false === strpos( $file, '/' ) ? $file : strstr( $file, '/', true );
+                if ( ! isset( $plugins[ $key ] ) ) {
+                    $plugins[ $key ]          = $data;
+                    $plugins[ $key ]['files'] = array();
+                }
+                $plugins[ $key ]['files'][] = $file;
+            }
+        }
+
+        return $plugins;
+    }
+
+    /**
+     * What to show for a file row in Where Used: which component and file, as plain text.
+     *
+     * There is never an edit or view link. Many hosts turn the file editor off, and editing
+     * live code from a link can take a site down. Users who cannot activate plugins get a
+     * generic title with no path.
+     *
+     * @param string $context_key Value from a file row, component and path joined by a pipe.
+     * @return array array( 'title' => string, 'edit_link' => null, 'view_link' => null ).
+     */
+    public static function describe( string $context_key ): array {
+        $described = array(
+            'title'     => __( 'Theme or plugin file', 'unattached-media-manager' ),
+            'edit_link' => null,
+            'view_link' => null,
+        );
+
+        if ( ! self::can_see_details() ) {
+            return $described;
+        }
+
+        $parts     = explode( '|', $context_key, 2 );
+        $component = self::component_label( $parts[0] );
+        if ( '' === $component ) {
+            return $described;
+        }
+
+        // A key that would not fit kept only a hash of the path, so there is no path to show.
+        $path = '';
+        if ( isset( $parts[1] ) && ! preg_match( '/^#[0-9a-f]{32}$/', $parts[1] ) ) {
+            $path = $parts[1];
+        }
+
+        $described['title'] = '' === $path
+            ? $component
+            : sprintf(
+                /* translators: 1: theme or plugin name, 2: path of a file inside it */
+                __( '%1$s: %2$s', 'unattached-media-manager' ),
+                $component,
+                $path
+            );
+
+        return $described;
+    }
+
+    /**
+     * Name of a component as the admin knows it, with its status: "Twenty Twenty (inactive)".
+     *
+     * @param string $component Component key, for example theme:twentytwenty or plugin:akismet.
+     * @return string Empty when the key is not one this plugin writes.
+     */
+    private static function component_label( string $component ): string {
+        if ( 'mu' === $component ) {
+            return __( 'Must-use plugins', 'unattached-media-manager' );
+        }
+
+        if ( 0 === strpos( $component, 'theme:' ) && strlen( $component ) > 6 ) {
+            $slug  = substr( $component, 6 );
+            $theme = wp_get_theme( $slug );
+
+            if ( ! $theme->exists() ) {
+                /* translators: %s: theme folder name */
+                return sprintf( __( '%s (not installed)', 'unattached-media-manager' ), $slug );
+            }
+
+            $name = (string) $theme->get( 'Name' );
+            $name = '' === $name ? $slug : $name;
+
+            if ( get_stylesheet() === $slug || get_template() === $slug ) {
+                return $name;
+            }
+
+            /* translators: %s: theme name */
+            return sprintf( __( '%s (inactive)', 'unattached-media-manager' ), $name );
+        }
+
+        if ( 0 === strpos( $component, 'plugin:' ) && strlen( $component ) > 7 ) {
+            $key       = substr( $component, 7 );
+            $installed = self::installed_plugins();
+            $known     = isset( $installed[ $key ] );
+            $name      = $known && '' !== (string) $installed[ $key ]['Name'] ? (string) $installed[ $key ]['Name'] : $key;
+
+            // The list is read once per request, so a plugin deleted since then is still in it.
+            if ( ! $known || ! file_exists( WP_PLUGIN_DIR . '/' . $key ) ) {
+                /* translators: %s: plugin name or folder name */
+                return sprintf( __( '%s (not installed)', 'unattached-media-manager' ), $name );
+            }
+
+            foreach ( $installed[ $key ]['files'] as $file ) {
+                if ( is_plugin_active( $file ) || is_plugin_active_for_network( $file ) ) {
+                    return $name;
+                }
+            }
+
+            /* translators: %s: plugin name */
+            return sprintf( __( '%s (inactive)', 'unattached-media-manager' ), $name );
+        }
+
+        return '';
+    }
+
+    /**
      * The context_key of a file row: component key and relative path joined by a pipe.
      *
      * Both parts come from disk, and wpdb refuses a row whose fields hold invalid UTF-8 or are

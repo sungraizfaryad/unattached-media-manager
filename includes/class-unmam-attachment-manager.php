@@ -294,6 +294,17 @@ class UNMAM_Attachment_Manager {
                 }
                 break;
 
+            case 'theme_file':
+            case 'plugin_file':
+            case 'mu_plugin_file':
+                // Never write code. Say which file needs a hand edit.
+                $result['error'] = sprintf(
+                    /* translators: %s: theme or plugin name and the path of a file in it */
+                    __( 'Not changed, edit this file by hand: %s', 'unattached-media-manager' ),
+                    UNMAM_File_Scanner::describe( (string) $ref['context_key'] )['title']
+                );
+                break;
+
             default:
                 $result['error'] = __( 'Unsupported reference type.', 'unattached-media-manager' );
                 break;

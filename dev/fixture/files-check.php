@@ -7,9 +7,11 @@
  *   tiny      same pass, files step limited to 3 files, 50 entries and 1 second a batch
  *   pause     same pass, with the files step told to stop after one unit every batch
  *   settings  the scan_files setting: untick, untick mid-pass, retick, upgrade shape
+ *   display   Where Used for file rows: titles, who sees what, Replace Media, with a temporary
+ *             author and contributor and the fixture plugin folder removed for a moment
  *
  * Every mode puts settings and fixture files back before it exits.
- * Run: dev/flpwp.sh eval-file dev/fixture/files-check.php [tiny|pause|settings]
+ * Run: dev/flpwp.sh eval-file dev/fixture/files-check.php [tiny|pause|settings|display]
  */
 
 $mode = empty( $args ) ? '' : $args[0];
@@ -158,6 +160,202 @@ $keep_posts_row = function ( $fn ) {
 		}
 	}
 };
+
+// A whole-site pass of the files step on its own: the posts and the other steps are left alone.
+$run_full_pass = function () use ( $scanner, &$override ) {
+	$override = array();
+	UNMAM_Database::reset_scan_progress( 'files' );
+	delete_option( UNMAM_File_Scanner::STATE_OPTION );
+	for ( $n = 0; $n < 5000; $n++ ) {
+		if ( 'completed' === $scanner->run_batch( 'files' )['status'] ) {
+			return true;
+		}
+	}
+	return false;
+};
+
+if ( 'display' === $mode ) {
+	echo "-- display\n";
+	if ( ! class_exists( 'UNMAM_Media_Modal' ) ) {
+		require_once UNMAM_PLUGIN_DIR . 'includes/admin/class-unmam-media-modal.php';
+	}
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+
+	$admin_id = (int) get_users( array( 'role' => 'administrator', 'number' => 1, 'orderby' => 'ID', 'fields' => 'ID' ) )[0];
+	$sidebar  = $fx['found']['sidebar'];
+	$own      = $fx['found']['phpimg']; // Only functions.php mentions it.
+	$spare    = $fx['spare']['rel2'];
+
+	$source_for = function ( $img ) {
+		foreach ( UNMAM_Database::get_references_for_attachment( $img, array( 'per_page' => 50 ) ) as $ref ) {
+			if ( 'file' === $ref['source_type'] ) {
+				return UNMAM_Database::describe_source( $ref );
+			}
+		}
+		return array( 'title' => '', 'edit_link' => false, 'view_link' => false );
+	};
+	$title_for = function ( $img ) use ( $source_for ) {
+		return (string) $source_for( $img )['title'];
+	};
+
+	// ajax_get_usage() as a given user. wp_send_json_*() ends in wp_die(), so that is swapped
+	// for one that throws. Returns the response data, or false for an error response.
+	$ajax_error    = null;
+	$ajax_usage_as = function ( $user_id, $attachment_id ) use ( &$ajax_error ) {
+		wp_set_current_user( $user_id );
+		$_POST = $_REQUEST = array(
+			'nonce'         => wp_create_nonce( 'unmam_media_modal_nonce' ),
+			'attachment_id' => $attachment_id,
+		);
+		$stop = function () {
+			return function () {
+				throw new RuntimeException( 'wp_die' );
+			};
+		};
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		add_filter( 'wp_die_ajax_handler', $stop );
+		ob_start();
+		try {
+			UNMAM_Media_Modal::instance()->ajax_get_usage();
+		} catch ( RuntimeException $e ) {
+			// Expected: the response has been printed.
+		} finally {
+			$out = ob_get_clean();
+			remove_filter( 'wp_die_ajax_handler', $stop );
+			remove_filter( 'wp_doing_ajax', '__return_true' );
+			$_POST = $_REQUEST = array();
+		}
+
+		$json       = json_decode( (string) $out, true );
+		$ajax_error = null;
+		if ( ! is_array( $json ) || empty( $json['success'] ) ) {
+			$ajax_error = is_array( $json ) && isset( $json['data'] ) ? $json['data'] : 'no response: ' . $out;
+			return false;
+		}
+		return $json['data'];
+	};
+
+	$rest_usage = function ( $user_id, $attachment_id ) {
+		wp_set_current_user( $user_id );
+		$request = new WP_REST_Request( 'GET', '/unmam/v1/attachments/' . $attachment_id . '/usage' );
+		$request->set_param( 'id', $attachment_id );
+		$request->set_param( 'page', 1 );
+		$request->set_param( 'per_page', 20 );
+		return ( new UNMAM_REST_Controller() )->get_attachment_usage( $request )->get_data();
+	};
+
+	$plugin_dir  = $fx['plugin'];
+	$plugin_file = $plugin_dir . '/unmam-fixture-plugin.php';
+	$plugin_body = is_readable( $plugin_file ) ? (string) file_get_contents( $plugin_file ) : '';
+	$sidebar_md5 = md5_file( $fx['theme'] . '/parts/sidebar.html' );
+	$orig_author = (int) get_post_field( 'post_author', $own );
+	$author_id   = 0;
+	$contrib_id  = 0;
+
+	try {
+		$ok( '' !== $plugin_body, 'precondition: the fixture plugin file can be read' );
+		$set_settings( array( 'scan_files' => true ) );
+		$ok( $run_full_pass(), 'precondition: a files pass finished' );
+		$ok( $file_rows_for( $sidebar ) > 0 && $file_rows_for( $own ) > 0 && $file_rows_for( $fx['found']['plugin'] ) > 0 && $file_rows_for( $fx['found']['mu'] ) > 0, 'precondition: the sidebar, functions.php, plugin and mu-plugin images have file rows' );
+
+		$author_id  = wp_insert_user( array(
+			'user_login' => 'unmamfix-author',
+			'user_pass'  => wp_generate_password( 24 ),
+			'user_email' => 'unmamfix-author@example.invalid',
+			'role'       => 'author',
+		) );
+		$contrib_id = wp_insert_user( array(
+			'user_login' => 'unmamfix-contributor',
+			'user_pass'  => wp_generate_password( 24 ),
+			'user_email' => 'unmamfix-contributor@example.invalid',
+			'role'       => 'contributor',
+		) );
+		$ok( is_int( $author_id ) && is_int( $contrib_id ), 'temporary author and contributor created' );
+		$wpdb->update( $wpdb->posts, array( 'post_author' => $author_id ), array( 'ID' => $own ) );
+		clean_post_cache( $own );
+
+		// An administrator sees the whole title and gets no links.
+		wp_set_current_user( $admin_id );
+		$ok( 'Unmam Fixture Theme (inactive): parts/sidebar.html' === $title_for( $sidebar ), 'admin title: ' . $title_for( $sidebar ) );
+		$ok( 'Unmam Fixture Plugin (inactive): unmam-fixture-plugin.php' === $title_for( $fx['found']['plugin'] ), 'admin title, plugin: ' . $title_for( $fx['found']['plugin'] ) );
+		$ok( 0 === strpos( $title_for( $fx['found']['mu'] ), 'Must-use plugins: ' ), 'mu title: ' . $title_for( $fx['found']['mu'] ) );
+		$ok( null === $source_for( $sidebar )['edit_link'] && null === $source_for( $sidebar )['view_link'], 'no edit or view link' );
+
+		$usage = $ajax_usage_as( $admin_id, $own );
+		$ok( is_array( $usage ) && 1 === count( $usage['references'] ), 'ajax as admin: one reference for the image in functions.php' );
+		$row = is_array( $usage ) ? $usage['references'][0] : array();
+		$ok( 'Unmam Fixture Theme (inactive): functions.php' === ( isset( $row['source_title'] ) ? $row['source_title'] : '' ), 'ajax as admin: full title' );
+		$ok( 'theme:unmam-fixture-theme|functions.php' === ( isset( $row['context_key'] ) ? $row['context_key'] : '' ) && ! empty( $row['reference_value'] ), 'ajax as admin: context_key and reference_value kept' );
+		$ok( empty( $row['edit_link'] ) && empty( $row['view_link'] ), 'ajax as admin: no links' );
+		$rest = $rest_usage( $admin_id, $own );
+		$ok( isset( $rest['references'][0]['context_key'] ) && 'Unmam Fixture Theme (inactive): functions.php' === $rest['references'][0]['source_title'], 'rest as admin: full title and context_key' );
+
+		// The author who owns the image may ask, and gets nothing that names a file.
+		wp_set_current_user( $author_id );
+		$ok( 'Theme or plugin file' === $title_for( $own ), 'author sees the generic title' );
+		$usage = $ajax_usage_as( $author_id, $own );
+		$ok( is_array( $usage ) && 1 === count( $usage['references'] ), 'ajax as the author of the image: allowed' );
+		$row = is_array( $usage ) ? $usage['references'][0] : array();
+		$ok( ! isset( $row['context_key'] ) && ! isset( $row['reference_value'] ), 'author gets no context_key and no reference_value' );
+		$ok( 'Theme or plugin file' === ( isset( $row['source_title'] ) ? $row['source_title'] : '' ), 'author: generic source_title' );
+		$whole = (string) wp_json_encode( $usage );
+		$ok( false === strpos( $whole, 'functions.php' ) && false === stripos( $whole, 'fixture' ) && false === strpos( $whole, 'unmam-fixture' ), 'author: nothing in the response names the file, theme or plugin' );
+		$rest = $rest_usage( $author_id, $own );
+		$whole = (string) wp_json_encode( $rest );
+		$ok( ! isset( $rest['references'][0]['context_key'] ) && ! isset( $rest['references'][0]['reference_value'] ) && false === stripos( $whole, 'fixture' ), 'rest handler as author: no context_key, no reference_value, no names' );
+
+		// Who may ask at all.
+		$ok( false === $ajax_usage_as( $contrib_id, $own ) && 'Permission denied' === $ajax_error, 'contributor refused' );
+		$ok( false === $ajax_usage_as( $author_id, $sidebar ) && 'Permission denied' === $ajax_error, 'author refused on an image they cannot edit' );
+		$ok( false === $ajax_usage_as( 0, $own ) && 'Permission denied' === $ajax_error, 'logged out refused' );
+		$ok( is_array( $ajax_usage_as( $admin_id, $sidebar ) ), 'admin allowed on any image' );
+
+		// The plugin goes away without a rescan. The request cache still lists it.
+		wp_set_current_user( $admin_id );
+		$ok( isset( UNMAM_File_Scanner::installed_plugins()['unmam-fixture-plugin'] ), 'precondition: the plugin list was read while the plugin was there' );
+		unlink( $plugin_file );
+		rmdir( $plugin_dir );
+		$ok( false !== strpos( $title_for( $fx['found']['plugin'] ), '(not installed)' ), 'removed plugin: ' . $title_for( $fx['found']['plugin'] ) );
+
+		// Replace Media never writes a file; it says which one to edit.
+		$dry = UNMAM_Attachment_Manager::instance()->replace_references( $sidebar, $spare, true );
+		$ok( ! empty( $dry['errors'] ) && false !== strpos( $dry['errors'][0]['error'], 'edit this file by hand: Unmam Fixture Theme (inactive): parts/sidebar.html' ), 'replace lists the file' );
+		$ok( ! $dry['replaced'] && 0 === $dry['total_count'], 'replace: a file row is not counted as replaced' );
+		$real = UNMAM_Attachment_Manager::instance()->replace_references( $sidebar, $spare, false );
+		$ok( 0 === $real['total_count'] && $sidebar_md5 === md5_file( $fx['theme'] . '/parts/sidebar.html' ), 'replace, for real: the theme file is untouched' );
+		$ok( $file_rows_for( $sidebar ) > 0 && 0 === $file_rows_for( $spare ), 'replace, for real: the file row stays on the old image' );
+		wp_set_current_user( $author_id );
+		$dry = UNMAM_Attachment_Manager::instance()->replace_references( $sidebar, $spare, true );
+		$ok( ! empty( $dry['errors'] ) && 'Not changed, edit this file by hand: Theme or plugin file' === $dry['errors'][0]['error'], 'replace as author: generic title in the message' );
+	} finally {
+		wp_set_current_user( 0 );
+
+		// The plugin folder as the seed made it.
+		if ( ! is_dir( $plugin_dir ) && '' !== $plugin_body ) {
+			mkdir( $plugin_dir, 0755 );
+			file_put_contents( $plugin_file, $plugin_body );
+		}
+
+		// The image goes back to its author before the temporary one is deleted, or its
+		// posts would go with it.
+		$wpdb->update( $wpdb->posts, array( 'post_author' => $orig_author ), array( 'ID' => $own ) );
+		clean_post_cache( $own );
+		foreach ( array( $author_id, $contrib_id ) as $uid ) {
+			if ( is_int( $uid ) && $uid > 0 ) {
+				wp_delete_user( $uid, $admin_id );
+			}
+		}
+		update_option( 'unmam_settings', $saved_settings );
+		$_POST = $_REQUEST = array();
+	}
+
+	$ok( is_file( $plugin_file ) && $plugin_body === file_get_contents( $plugin_file ), 'cleanup: the fixture plugin is back' );
+	$ok( $orig_author === (int) get_post_field( 'post_author', $own ), 'cleanup: the image has its first author' );
+	$ok( ! get_user_by( 'login', 'unmamfix-author' ) && ! get_user_by( 'login', 'unmamfix-contributor' ), 'cleanup: both temporary users are gone' );
+	$ok( ! $notices, 'no notices or warnings from the plugin' . ( $notices ? ': ' . $notices[0] : '' ) );
+	echo "\nfailures: $fail\n";
+	return;
+}
 
 if ( 'settings' !== $mode ) {
 	// Mode limits.

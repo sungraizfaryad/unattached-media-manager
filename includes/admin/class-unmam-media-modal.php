@@ -239,6 +239,10 @@ class UNMAM_Media_Modal {
             wp_send_json_error( 'Invalid attachment ID' );
         }
 
+        if ( ! current_user_can( 'upload_files' ) || ! current_user_can( 'edit_post', $attachment_id ) ) {
+            wp_send_json_error( 'Permission denied' );
+        }
+
         $page       = isset( $_POST['page'] ) ? absint( $_POST['page'] ) : 1;
         $references = UNMAM_Database::get_references_for_attachment( $attachment_id, array(
             'per_page' => 20,
@@ -256,7 +260,9 @@ class UNMAM_Media_Modal {
                 $ref['edit_link']    = $source['edit_link'];
                 $ref['view_link']    = $source['view_link'];
             }
+            $ref = UNMAM_File_Scanner::without_details( $ref );
         }
+        unset( $ref );
 
         wp_send_json_success( array(
             'references'  => $references,

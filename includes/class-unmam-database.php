@@ -428,10 +428,16 @@ class UNMAM_Database {
      * @param array $ref Reference row, needs at least source_id and source_type.
      * @return array|null array( 'title', 'edit_link', 'view_link' ), or null when the
      *                     source can't be resolved or isn't a type this knows about.
+     *                     A file row always resolves, without links.
      */
     public static function describe_source( $ref ) {
         $source_id   = isset( $ref['source_id'] ) ? (int) $ref['source_id'] : 0;
         $source_type = isset( $ref['source_type'] ) ? $ref['source_type'] : '';
+
+        // File rows have no source id; the component and path are in the context key.
+        if ( 'file' === $source_type ) {
+            return UNMAM_File_Scanner::describe( isset( $ref['context_key'] ) ? (string) $ref['context_key'] : '' );
+        }
 
         if ( $source_id <= 0 ) {
             return null;

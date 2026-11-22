@@ -281,7 +281,9 @@ class UNMAM_REST_Controller extends WP_REST_Controller {
                 $ref['source_title'] = $source['title'];
                 $ref['edit_url']     = $source['edit_link'];
             }
+            $ref = UNMAM_File_Scanner::without_details( $ref );
         }
+        unset( $ref );
 
         return rest_ensure_response( array(
             'attachment_id' => $attachment_id,
