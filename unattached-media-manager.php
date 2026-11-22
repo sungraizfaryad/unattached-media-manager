@@ -240,6 +240,7 @@ final class Unattached_Media_Manager
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-history.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-database.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-reference-extractor.php';
+        require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-design-content.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-resource-monitor.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-scanner.php';
         require_once UNMAM_PLUGIN_DIR . 'includes/class-unmam-attachment-manager.php';
