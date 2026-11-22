@@ -46,6 +46,15 @@ plan, including copying ACF Pro in, since FLP does not have it.
 
 ---
 
+## 1.3.3 — Design content scanning (BUILT, NOT RELEASED)
+
+Additional CSS, edited Site Editor templates and parts, and Site Editor styles are scanned, plus
+two Replace Media fixes (backslash stripping, `wp-image-12` matching `wp-image-123`). Built and
+tested on FLP 2026-11-22 on branch `feature/1.3.3-design-content`.
+Spec: `dev/specs/2026-11-22-design-content-scanning-design.md`.
+
+---
+
 ## 1.4.0 — Filesystem scanning
 
 **Why:** the plugin cannot see media referenced from files, only from the database. CSS
@@ -76,8 +85,7 @@ plainly in the changelog rather than overselling it.
 - `source_type` for these rows must not be `post`, and they must never auto-attach.
 - `uninstall.php` must clean the sharded manifest options; the existing exact-name list and
   the transient wildcard will not catch them.
-- The REST `/scan/batch` endpoint has a hardcoded scan-type enum that needs the new type
-  added. The original plan missed this.
+- The REST `/scan/batch` enum already reads `get_active_scan_types()` (since 1.3.0); nothing to add there.
 
 **Estimate:** about two days.
 
