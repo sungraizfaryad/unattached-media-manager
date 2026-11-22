@@ -169,6 +169,117 @@ try {
 		$ok( array() === UNMAM_Reference_Extractor::find_candidates( str_repeat( ' ', 1048577 ) . $u1 ), 'over MAX_TEXT_LENGTH returns nothing' );
 		$ok( 1 === count( UNMAM_Reference_Extractor::find_candidates( str_repeat( ' ', 1048576 - strlen( $u1 ) ) . $u1 ) ), 'exactly MAX_TEXT_LENGTH still scanned' );
 	} );
+	$section( 'walker', function () use ( $ok ) {
+		$root = trailingslashit( get_temp_dir() ) . 'unmamfix-walk-' . getmypid();
+		$pro  = $root . '-pro';
+
+		// Unlinks links without following them.
+		$rm = function ( $path ) use ( &$rm ) {
+			if ( is_link( $path ) || is_file( $path ) ) {
+				unlink( $path );
+			} elseif ( is_dir( $path ) ) {
+				foreach ( scandir( $path ) as $n ) {
+					if ( '.' !== $n && '..' !== $n ) {
+						$rm( $path . '/' . $n );
+					}
+				}
+				rmdir( $path );
+			}
+		};
+		$put = function ( $abs, $body = '/* x */' ) {
+			wp_mkdir_p( dirname( $abs ) );
+			file_put_contents( $abs, $body );
+		};
+		// Calls walk() until done, resuming after 'last'; the cap turns a stall into a FAIL.
+		$drain = function ( $dir, $max_entries ) {
+			$res   = array( 'files' => array(), 'skipped' => array(), 'done' => false, 'calls' => 0 );
+			$after = '';
+			while ( $res['calls'] < 200 ) {
+				$res['calls']++;
+				$r              = UNMAM_File_Walker::walk( $dir, $after, 1000, $max_entries );
+				$res['files']   = array_merge( $res['files'], $r['files'] );
+				$res['skipped'] = array_merge( $res['skipped'], $r['skipped'] );
+				if ( $r['done'] ) {
+					$res['done'] = true;
+					break;
+				}
+				$after = $r['last'];
+			}
+			return $res;
+		};
+
+		$rm( $root );
+		$rm( $pro );
+		try {
+			foreach ( array( '10/b.css', '9/a.css', 'a/x.css', 'a-b/y.css', 'a.css', 'doc.md', 'node_modules/n.css', 'vendor/v.css', '.git/g.css', 'chain/c1/c2/c3/z.css' ) as $f ) {
+				$put( $root . '/' . $f );
+			}
+			$put( $root . '/big.css', str_repeat( 'a', 10485761 ) );
+			$put( $pro . '/p.css' );
+			symlink( '.', $root . '/loop' );
+			symlink( '../unmamfix-walk-' . getmypid() . '-pro', $root . '/out' );
+
+			$all = UNMAM_File_Walker::walk( $root, '', 1000, 100000 );
+			$ok( array( '10/b.css', '9/a.css', 'a/x.css', 'a-b/y.css', 'a.css', 'chain/c1/c2/c3/z.css' ) === $all['files'], 'byte order, skips, no loop, no escape' );
+			$ok( $all['done'], 'done' );
+			$ok( array( array( 'path' => 'big.css', 'reason' => 'too_big' ) ) === $all['skipped'], 'big file reported' );
+			$ok( 21 === $all['entries'] && 'vendor' === $all['last'], 'entries and last on a full walk' );
+
+			// One at a time from every cursor position gives the same list exactly once.
+			$seen  = array();
+			$after = '';
+			do {
+				$r = UNMAM_File_Walker::walk( $root, $after, 1, 100000 );
+				foreach ( $r['files'] as $f ) {
+					$seen[] = $f;
+					$after  = $f;
+				}
+			} while ( ! $r['done'] );
+			$ok( $all['files'] === $seen, 'resume one file at a time' );
+
+			$ok( array( 'a/x.css', 'a-b/y.css', 'a.css', 'chain/c1/c2/c3/z.css' ) === UNMAM_File_Walker::walk( $root, '9/a.css', 1000, 100000 )['files'], 'resume after numeric folder' );
+			$ok( array( 'a-b/y.css', 'a.css', 'chain/c1/c2/c3/z.css' ) === UNMAM_File_Walker::walk( $root, 'a/x.css', 1000, 100000 )['files'], 'resume out of a/ into a-b/' );
+			$ok( array( 'a.css', 'chain/c1/c2/c3/z.css' ) === UNMAM_File_Walker::walk( $root, 'a-b/y.css', 1000, 100000 )['files'], 'resume out of a-b/' );
+			$ok( array( 'a/x.css', 'a-b/y.css', 'a.css', 'chain/c1/c2/c3/z.css' ) === UNMAM_File_Walker::walk( $root, 'a/missing.css', 1000, 100000 )['files'], 'deleted cursor file' );
+			$ok( array( 'a.css' ) === UNMAM_File_Walker::walk( $root . '/a.css', '', 10, 10 )['files'], 'single-file root' );
+			$ok( array() === UNMAM_File_Walker::walk( $root . '/a.css', 'a.css', 10, 10 )['files'], 'single-file root after itself' );
+			$ok( ! UNMAM_File_Walker::walk( $root, '', 1000, 3 )['done'], 'entry budget stops the walk' );
+
+			// A cursor on a folder that is not walked never descends into it.
+			foreach ( array( 'node_modules', 'vendor', 'loop', 'out' ) as $skipped_dir ) {
+				$r = UNMAM_File_Walker::walk( $root, $skipped_dir, 1000, 100000 );
+				$ok( array() === $r['files'] && array() === $r['skipped'] && $r['done'], "cursor on skipped $skipped_dir carries on after it" );
+			}
+			$ok( $all['files'] === UNMAM_File_Walker::walk( $root, '.git', 1000, 100000 )['files'], 'cursor on a dot folder does not enter it' );
+			$ok( array( 'chain/c1/c2/c3/z.css' ) === UNMAM_File_Walker::walk( $root, 'chain/c1', 1000, 100000 )['files'], 'cursor on a folder resumes inside it' );
+
+			// Entry budget: every call makes progress, a stall hits the cap.
+			$d = $drain( $root, 2 );
+			$ok( $d['done'] && $all['files'] === $d['files'], 'resume under the entry budget: same files' );
+			$ok( array( array( 'path' => 'big.css', 'reason' => 'too_big' ) ) === $d['skipped'], 'resume under the entry budget: big.css reported once' );
+
+			$d = $drain( $root, 1 );
+			$ok( $d['done'], 'one entry per call reaches done within the cap' );
+			$ok( 1 === count( array_keys( $d['files'], 'chain/c1/c2/c3/z.css', true ) ), 'nested chain returned exactly once' );
+			$ok( $all['files'] === $d['files'], 'one entry per call: same files' );
+
+			// Links to files, case-insensitive extensions, dot files, folders past the depth cap.
+			$put( $pro . '/UP.CSS' );
+			$put( $pro . '/.d.css' );
+			symlink( 'p.css', $pro . '/lf.css' );
+			symlink( '../unmamfix-walk-' . getmypid() . '/a.css', $pro . '/esc.css' );
+			$deep = implode( '/', array_fill( 0, 26, 'd' ) );
+			wp_mkdir_p( $pro . '/' . $deep );
+			$r = UNMAM_File_Walker::walk( $pro, '', 1000, 100000 );
+			$ok( array( 'UP.CSS', 'lf.css', 'p.css' ) === $r['files'], 'file links, upper-case extension, dot file' );
+			$ok( array( array( 'path' => $deep, 'reason' => 'too_deep' ) ) === $r['skipped'], 'too-deep folder reported once' );
+			$r = UNMAM_File_Walker::walk( $pro, $deep, 1000, 100000 );
+			$ok( array() === $r['skipped'] && $r['done'], 'cursor on the too-deep folder does not report or enter it' );
+		} finally {
+			$rm( $root );
+			$rm( $pro );
+		}
+	} );
 } finally {
 	foreach ( $ids as $id ) {
 		wp_delete_attachment( $id, true );
