@@ -342,6 +342,165 @@ try {
 			$rm( $tp );
 		}
 	} );
+	$section( 'pieces', function ( $fx ) use ( $ok ) {
+		$id1 = $fx['ids'][1];
+		list( $u1, $u2 ) = array( $fx['urls'][1], $fx['urls'][2] );
+		$u3   = $fx['urls'][3];
+		$root = trailingslashit( get_temp_dir() ) . 'unmamfix-pieces-' . getmypid();
+		$cut  = 1048576;
+		$has  = function ( $list, $url ) {
+			return in_array( array( 'type' => 'url', 'value' => $url ), $list, true );
+		};
+		$count_of = function ( $list, $value ) {
+			return count( array_filter( $list, function ( $c ) use ( $value ) {
+				return $c['value'] === $value;
+			} ) );
+		};
+
+		// Piece arithmetic.
+		$ok( 1048576 === UNMAM_File_Scanner::PIECE_BYTES && 4096 === UNMAM_File_Scanner::OVERLAP_BYTES, 'piece constants' );
+		$ok( array() === UNMAM_File_Scanner::piece_ranges( 0 ), 'ranges: empty file' );
+		foreach ( array( 10, 1048576, 1048577, 3000000 ) as $size ) {
+			$r    = UNMAM_File_Scanner::piece_ranges( $size );
+			$good = $r && 0 === $r[0][0];
+			foreach ( $r as $i => $range ) {
+				$good = $good && $range[1] > 0 && $range[1] <= 1048576;
+				if ( $i > 0 ) {
+					$good = $good && $range[0] === $r[ $i - 1 ][0] + $r[ $i - 1 ][1] - 4096;
+				}
+			}
+			$last = end( $r );
+			$ok( $good && $size === $last[0] + $last[1], "ranges: $size, lengths, overlap and end" );
+		}
+		$ok( array( array( 0, 10 ) ) === UNMAM_File_Scanner::piece_ranges( 10 ), 'ranges: small file is one piece' );
+		$ok( array( array( 0, 1048576 ) ) === UNMAM_File_Scanner::piece_ranges( 1048576 ), 'ranges: exactly one piece' );
+		$ok( array( array( 0, 1048576 ), array( 1044480, 4097 ) ) === UNMAM_File_Scanner::piece_ranges( 1048577 ), 'ranges: one byte over' );
+		$ok( array( array( 0, 1048576 ), array( 1044480, 1048576 ), array( 2088960, 911040 ) ) === UNMAM_File_Scanner::piece_ranges( 3000000 ), 'ranges: three pieces' );
+
+		$rm = function () use ( $root ) {
+			if ( is_dir( $root ) ) {
+				foreach ( scandir( $root ) as $n ) {
+					if ( '.' !== $n && '..' !== $n ) {
+						unlink( $root . '/' . $n );
+					}
+				}
+				rmdir( $root );
+			}
+		};
+		$put = function ( $name, $body ) use ( $root ) {
+			wp_mkdir_p( $root );
+			file_put_contents( $root . '/' . $name, $body );
+			return $root . '/' . $name;
+		};
+		$rm();
+		try {
+			// $u1 sits wholly in the second piece, $u2 starts 20 bytes before the cut,
+			// $u3 sits in the overlap so both pieces see it.
+			$at = function ( $parts ) {
+				ksort( $parts );
+				$body = '';
+				foreach ( $parts as $offset => $text ) {
+					$body .= str_repeat( ' ', $offset - strlen( $body ) ) . $text;
+				}
+				return $body;
+			};
+			$big = $put( 'big.css', $at( array(
+				$cut - 20                       => $u2,
+				$cut - 1000 - strlen( $u3 )     => $u3,
+				$cut + 200                      => $u1,
+				$cut + 250 + strlen( $u1 )      => ' ',
+			) ) );
+			$c = UNMAM_File_Scanner::file_candidates( $big );
+			$ok( $has( $c, $u1 ), 'URL past the first MB' );
+			$ok( $has( $c, $u2 ), 'URL across the boundary' );
+			$ok( 1 === $count_of( $c, $u2 ), 'boundary URL counted once' );
+			$ok( $has( $c, $u3 ) && 1 === $count_of( $c, $u3 ), 'URL in the overlap counted once' );
+			$ok( array( $u3, $u2, $u1 ) === array_column( $c, 'value' ), 'first-seen order across pieces' );
+
+			$third = $put( 'third.css', $at( array( 2100000 => $u1 ) ) );
+			$ok( array( array( 'type' => 'url', 'value' => $u1 ) ) === UNMAM_File_Scanner::file_candidates( $third ), 'URL in the third piece' );
+
+			$json1 = $put( 'one.json', '{"a":"' . str_replace( '/', '\/', $u1 ) . '"}' );
+			$json3 = $put( 'three.json', '{"a":"' . str_replace( '/', '\\\\\\/', $u1 ) . '"}' );
+			$ok( $has( UNMAM_File_Scanner::file_candidates( $json1 ), $u1 ), 'https:\/\/ escaped' );
+			$ok( $has( UNMAM_File_Scanner::file_candidates( $json3 ), $u1 ), 'https:\\\/ double escaped' );
+			$ok( false !== strpos( file_get_contents( $json3 ), '\\\\\\/' ), 'precondition: the double escaped file has three backslashes' );
+
+			// Literal IDs count in .php only, whatever the case of the extension.
+			$call    = "/* wp_get_attachment_url( $id1 ) */ a{color:red}";
+			$css     = $put( 'call.css', $call );
+			$php     = $put( 'call.php', $call );
+			$php_up  = $put( 'call-up.PHP', $call );
+			$is_id   = function ( $c ) {
+				return 'id' === $c['type'];
+			};
+			$ok( ! array_filter( UNMAM_File_Scanner::file_candidates( $css ), $is_id ), 'calls only in php' );
+			$ok( array( array( 'type' => 'id', 'value' => $id1 ) ) === UNMAM_File_Scanner::file_candidates( $php ), 'calls found in a php file' );
+			$ok( array( array( 'type' => 'id', 'value' => $id1 ) ) === UNMAM_File_Scanner::file_candidates( $php_up ), 'calls found in an upper-case .PHP file' );
+
+			// Relative URLs and tails are always on.
+			$p1 = substr( $u1, strlen( untrailingslashit( wp_get_upload_dir()['baseurl'] ) ) + 1 );
+			$c  = UNMAM_File_Scanner::file_candidates( $put( 'rel.css', 'a{background:url(' . wp_parse_url( $u2, PHP_URL_PATH ) . ')} b{background:url(../../uploads/' . $p1 . ')}' ) );
+			$ok( array( 'url', 'exact_url' ) === array_column( $c, 'type' ) && $u2 === $c[0]['value'], 'root-relative url and tail found without options' );
+
+			// Files that cannot be read: nothing found, and the caller is told.
+			$inc = false;
+			$ok( array() === UNMAM_File_Scanner::file_candidates( $root . '/does-not-exist.css', $inc ), 'missing file' );
+			$ok( true === $inc, 'missing file sets incomplete' );
+			$inc = false;
+			$ok( array() === UNMAM_File_Scanner::file_candidates( $root, $inc ) && true === $inc, 'a folder is not a file' );
+			$empty = $put( 'empty.css', '' );
+			$inc   = true;
+			$ok( array() === UNMAM_File_Scanner::file_candidates( $empty, $inc ) && false === $inc, 'empty file is complete and empty' );
+			$locked = $put( 'locked.css', $u1 );
+			chmod( $locked, 0000 );
+			clearstatcache( true );
+			if ( is_readable( $locked ) ) {
+				echo "skip  unreadable file check (this user can read a 0000 file)\n";
+			} else {
+				$inc = false;
+				$ok( array() === UNMAM_File_Scanner::file_candidates( $locked, $inc ) && true === $inc, 'unreadable file sets incomplete' );
+			}
+			chmod( $locked, 0644 );
+
+			// A normal file, one piece or several, is complete; the flag is reset on every call.
+			$inc = true;
+			UNMAM_File_Scanner::file_candidates( $css, $inc );
+			$ok( false === $inc, 'normal file sets incomplete false' );
+			$inc = true;
+			UNMAM_File_Scanner::file_candidates( $big, $inc );
+			$ok( false === $inc, 'multi-piece file sets incomplete false' );
+			$ok( is_array( UNMAM_File_Scanner::file_candidates( $css ) ), 'incomplete flag is optional' );
+
+			// A regex that gives up must not read as no images: what was found stays, the flag is set.
+			$hostile = $u1 . ' ' . str_repeat( 'uploads/', 131000 );
+			$ok( strlen( $hostile ) < 1048576, 'precondition: the hostile text fits one piece' );
+			$inc = null;
+			$c   = UNMAM_Reference_Extractor::find_candidates( $hostile, array( 'tails' => true ), $inc );
+			$ok( true === $inc && $has( $c, $u1 ), 'find_candidates: failed regex flags incomplete and keeps earlier finds' );
+			$inc = true;
+			UNMAM_Reference_Extractor::find_candidates( $u1, array( 'tails' => true ), $inc );
+			$ok( true === $inc, 'find_candidates: never clears the flag' );
+			$inc = false;
+			UNMAM_Reference_Extractor::find_candidates( $u1, array( 'tails' => true ), $inc );
+			$ok( false === $inc, 'find_candidates: a clean run leaves the flag alone' );
+			$inc = null;
+			$ok( 1 === count( UNMAM_Reference_Extractor::find_candidates( $u1, array(), $inc ) ) && true !== $inc, 'find_candidates: a clean run does not set the flag' );
+
+			$bad = $put( 'hostile.php', $hostile );
+			$inc = null;
+			$c   = UNMAM_File_Scanner::file_candidates( $bad, $inc );
+			$ok( true === $inc && $has( $c, $u1 ), 'file with a failing regex: other candidates kept, incomplete set' );
+			$inc = false;
+			$c   = UNMAM_File_Scanner::file_candidates( $put( 'hostile.json', $hostile ), $inc );
+			$ok( true === $inc, 'file with a failing regex: set for any extension' );
+		} finally {
+			if ( isset( $locked ) && file_exists( $locked ) ) {
+				chmod( $locked, 0644 );
+			}
+			$rm();
+		}
+	} );
 } finally {
 	foreach ( $ids as $id ) {
 		wp_delete_attachment( $id, true );

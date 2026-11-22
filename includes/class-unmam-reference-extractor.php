@@ -98,15 +98,19 @@ class UNMAM_Reference_Extractor {
      *   tails     Paths that start at the uploads folder name, as in `../../uploads/2024/a.jpg`.
      *   calls     Literal IDs in core attachment function calls.
      *
-     * @param string $text    Text to scan.
-     * @param array  $options See above.
+     * A regex that fails (PCRE gives up on a hostile blob) leaves its pass out of the result.
+     * Pass $incomplete to learn that: it is set to true then, and never set back to false.
+     *
+     * @param string    $text       Text to scan.
+     * @param array     $options    See above.
+     * @param bool|null $incomplete Set to true when any pattern match failed.
      * @return array List of array( 'type' => 'id'|'url'|'exact_url', 'value' => int|string ),
      *               in the order found and without repeats. Empty for an oversized blob.
      */
-    public static function find_candidates( string $text, array $options = array() ): array {
+    public static function find_candidates( string $text, array $options = array(), &$incomplete = null ): array {
         $found = array();
 
-        foreach ( self::collect( $text, $options ) as $candidate ) {
+        foreach ( self::collect( $text, $options, $incomplete ) as $candidate ) {
             $found[] = array(
                 'type'  => $candidate['type'],
                 'value' => $candidate['value'],
@@ -172,11 +176,12 @@ class UNMAM_Reference_Extractor {
      * The one place that finds candidates. Relative upload URLs carry a `relative` flag
      * so extract_from_text() can keep its precedence; find_candidates() drops it.
      *
-     * @param string $text    Text to scan.
-     * @param array  $options See find_candidates().
+     * @param string    $text       Text to scan.
+     * @param array     $options    See find_candidates().
+     * @param bool|null $incomplete See find_candidates().
      * @return array
      */
-    private static function collect( $text, $options ) {
+    private static function collect( $text, $options, &$incomplete = null ) {
         if ( '' === $text || strlen( $text ) > self::MAX_TEXT_LENGTH ) {
             return array();
         }
@@ -211,7 +216,7 @@ class UNMAM_Reference_Extractor {
 
         // 1. wp-image-{ID} classes (editor-inserted images). Every ID lifted out
         // of markup is untrusted, so it must resolve to a real attachment.
-        if ( preg_match_all( '/wp-image-(\d+)/', $text, $matches ) ) {
+        if ( self::match_all( '/wp-image-(\d+)/', $text, $matches, 0, $incomplete ) ) {
             foreach ( $matches[1] as $id ) {
                 $add( 'id', (int) $id );
             }
@@ -220,7 +225,7 @@ class UNMAM_Reference_Extractor {
         // 2. Direct media URLs.
         $spans  = array();
         $url_re = '#https?://[^\s"\'<>()]+?\.(?:' . self::MEDIA_EXTENSIONS . ')#i';
-        if ( preg_match_all( $url_re, $text, $matches, PREG_OFFSET_CAPTURE ) ) {
+        if ( self::match_all( $url_re, $text, $matches, PREG_OFFSET_CAPTURE, $incomplete ) ) {
             foreach ( $matches[0] as $match ) {
                 $add( 'url', $match[0] );
                 $spans[] = array( $match[1], strlen( $match[0] ) );
@@ -228,7 +233,7 @@ class UNMAM_Reference_Extractor {
         }
 
         if ( $options['relative'] ) {
-            foreach ( self::relative_upload_urls( $text ) as $hit ) {
+            foreach ( self::relative_upload_urls( $text, $incomplete ) as $hit ) {
                 $add( 'url', $hit['url'], true );
                 $spans[] = array( $hit['offset'], $hit['length'] );
             }
@@ -238,7 +243,7 @@ class UNMAM_Reference_Extractor {
         $anchor = $options['tails'] ? self::tail_anchor() : '';
         if ( '' !== $anchor ) {
             $re = '#(?<![\w-])' . preg_quote( $anchor, '#' ) . '/([^\s"\'<>()]+?\.(?:' . self::MEDIA_EXTENSIONS . '))#i';
-            if ( preg_match_all( $re, self::blank_spans( $text, $spans ), $matches ) ) {
+            if ( self::match_all( $re, self::blank_spans( $text, $spans ), $matches, 0, $incomplete ) ) {
                 $baseurl = untrailingslashit( wp_get_upload_dir()['baseurl'] );
                 foreach ( $matches[1] as $tail ) {
                     $add( 'exact_url', $baseurl . '/' . $tail );
@@ -249,7 +254,7 @@ class UNMAM_Reference_Extractor {
         // 4. Literal IDs handed to core attachment functions.
         if ( $options['calls'] ) {
             $re = '#\b(?:wp_get_attachment_image|wp_get_attachment_image_src|wp_get_attachment_image_url|wp_get_attachment_url|wp_get_attachment_link|wp_get_attachment_metadata|wp_get_attachment_caption|wp_get_attachment_image_srcset|wp_get_attachment_image_sizes|wp_get_attachment_thumb_url|wp_get_original_image_url|wp_get_original_image_path|get_attached_file|image_downsize)\s*\(\s*[\'"]?(\d+)[\'"]?\s*[,)]#';
-            if ( preg_match_all( $re, $text, $matches ) ) {
+            if ( self::match_all( $re, $text, $matches, 0, $incomplete ) ) {
                 foreach ( $matches[1] as $id ) {
                     $add( 'id', (int) $id );
                 }
@@ -257,6 +262,26 @@ class UNMAM_Reference_Extractor {
         }
 
         return $found;
+    }
+
+    /**
+     * preg_match_all() that reports a failed match instead of passing it off as no match.
+     *
+     * @param string    $re         Pattern.
+     * @param string    $text       Subject.
+     * @param array     $matches    Filled as preg_match_all() would.
+     * @param int       $flags      preg_match_all() flags.
+     * @param bool|null $incomplete Set to true when the match failed.
+     * @return int Number of matches, 0 on a failure.
+     */
+    private static function match_all( $re, $text, &$matches, $flags, &$incomplete ) {
+        $count = preg_match_all( $re, $text, $matches, $flags );
+        if ( false === $count ) {
+            $incomplete = true;
+            return 0;
+        }
+
+        return $count;
     }
 
     /**
@@ -299,11 +324,12 @@ class UNMAM_Reference_Extractor {
      * The lookbehind keeps this off the tail of an absolute URL, which the main pattern
      * has already handled.
      *
-     * @param string $text
+     * @param string    $text
+     * @param bool|null $incomplete See find_candidates().
      * @return array List of array( 'url' => absolute URL, 'offset' => int, 'length' => int ),
      *               one per occurrence; the offset and length are those of the text as written.
      */
-    private static function relative_upload_urls( $text ) {
+    private static function relative_upload_urls( $text, &$incomplete = null ) {
         $baseurl = untrailingslashit( wp_get_upload_dir()['baseurl'] );
         $path    = untrailingslashit( (string) wp_parse_url( $baseurl, PHP_URL_PATH ) );
 
@@ -313,7 +339,7 @@ class UNMAM_Reference_Extractor {
         }
 
         $re = '#(?<![\w.:/-])(?://[^\s"\'<>()/]+)?' . preg_quote( $path, '#' ) . '/[^\s"\'<>()]+?\.(?:' . self::MEDIA_EXTENSIONS . ')#i';
-        if ( ! preg_match_all( $re, $text, $matches, PREG_OFFSET_CAPTURE ) ) {
+        if ( ! self::match_all( $re, $text, $matches, PREG_OFFSET_CAPTURE, $incomplete ) ) {
             return array();
         }
 
