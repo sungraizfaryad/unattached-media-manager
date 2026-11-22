@@ -578,6 +578,52 @@ class UNMAM_Database {
     }
 
     /**
+     * Filename / type / upload-date filter shared by the Unused and Trash lists.
+     * Expects the posts table aliased as p. Returns the SQL fragment (empty, or
+     * starting with " AND") and the values to bind into it.
+     *
+     * @param array $args Keys s, mime_type, date_from, date_to. Dates are YYYY-MM-DD.
+     * @return array
+     */
+    private static function list_filter_clause( $args ) {
+        global $wpdb;
+
+        $sql    = '';
+        $params = array();
+
+        if ( isset( $args['s'] ) && '' !== $args['s'] ) {
+            $like     = '%' . $wpdb->esc_like( $args['s'] ) . '%';
+            $sql     .= ' AND (p.post_title LIKE %s OR p.guid LIKE %s)';
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        if ( isset( $args['mime_type'] ) && '' !== $args['mime_type'] ) {
+            $mime = $args['mime_type'];
+            if ( false === strpos( $mime, '/' ) ) {
+                // 'image' means the whole image/* group
+                $sql     .= ' AND p.post_mime_type LIKE %s';
+                $params[] = $mime . '/%';
+            } else {
+                $sql     .= ' AND p.post_mime_type = %s';
+                $params[] = $mime;
+            }
+        }
+
+        if ( isset( $args['date_from'] ) && '' !== $args['date_from'] ) {
+            $sql     .= ' AND p.post_date >= %s';
+            $params[] = $args['date_from'] . ' 00:00:00';
+        }
+
+        if ( isset( $args['date_to'] ) && '' !== $args['date_to'] ) {
+            $sql     .= ' AND p.post_date <= %s';
+            $params[] = $args['date_to'] . ' 23:59:59';
+        }
+
+        return array( $sql, $params );
+    }
+
+    /**
      * Get unused attachments with full details for the admin panel
      *
      * @param array $args Query arguments.
@@ -607,38 +653,7 @@ class UNMAM_Database {
         $orderby = in_array( $args['orderby'], $allowed_orderby, true ) ? $args['orderby'] : 'ID';
         $order = 'ASC' === strtoupper( $args['order'] ) ? 'ASC' : 'DESC';
 
-        // Build optional WHERE clauses for filters
-        $where_extra = '';
-        $where_params = array();
-
-        if ( '' !== $args['s'] ) {
-            $like = '%' . $wpdb->esc_like( $args['s'] ) . '%';
-            $where_extra .= ' AND (p.post_title LIKE %s OR p.guid LIKE %s)';
-            $where_params[] = $like;
-            $where_params[] = $like;
-        }
-
-        if ( '' !== $args['mime_type'] ) {
-            $mime = $args['mime_type'];
-            if ( false === strpos( $mime, '/' ) ) {
-                // Group like 'image' -> 'image/%'
-                $where_extra .= ' AND p.post_mime_type LIKE %s';
-                $where_params[] = $mime . '/%';
-            } else {
-                $where_extra .= ' AND p.post_mime_type = %s';
-                $where_params[] = $mime;
-            }
-        }
-
-        if ( '' !== $args['date_from'] ) {
-            $where_extra .= ' AND p.post_date >= %s';
-            $where_params[] = $args['date_from'] . ' 00:00:00';
-        }
-
-        if ( '' !== $args['date_to'] ) {
-            $where_extra .= ' AND p.post_date <= %s';
-            $where_params[] = $args['date_to'] . ' 23:59:59';
-        }
+        list( $where_extra, $where_params ) = self::list_filter_clause( $args );
 
         $base_where = "WHERE p.post_type = 'attachment'
             AND p.post_status != 'trash'
@@ -747,42 +762,54 @@ class UNMAM_Database {
         global $wpdb;
 
         $defaults = array(
-            'per_page' => 20,
-            'page'     => 1,
+            'per_page'  => 20,
+            'page'      => 1,
+            's'         => '',
+            'mime_type' => '',
+            'date_from' => '',
+            'date_to'   => '',
         );
 
         $args   = wp_parse_args( $args, $defaults );
         $offset = ( $args['page'] - 1 ) * $args['per_page'];
 
-        // Get total count
-        $total = (int) $wpdb->get_var(
-            "SELECT COUNT(*)
-            FROM {$wpdb->posts}
-            WHERE post_type = 'attachment'
-            AND post_status = 'trash'"
-        );
+        list( $where_extra, $where_params ) = self::list_filter_clause( $args );
 
-        // Get items
+        $where = "WHERE p.post_type = 'attachment' AND p.post_status = 'trash'" . $where_extra;
+
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $where is fixed SQL plus placeholders; values are bound via prepare
+        $count_sql = "SELECT COUNT(*) FROM {$wpdb->posts} p {$where}";
+        $total     = (int) ( $where_params
+            ? $wpdb->get_var( $wpdb->prepare( $count_sql, $where_params ) )
+            : $wpdb->get_var( $count_sql ) );
+
         $results = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT ID, post_title, guid, post_date, post_mime_type
-                FROM {$wpdb->posts}
-                WHERE post_type = 'attachment'
-                AND post_status = 'trash'
-                ORDER BY post_modified DESC
+                "SELECT p.ID, p.post_title, p.guid, p.post_date, p.post_mime_type
+                FROM {$wpdb->posts} p
+                {$where}
+                ORDER BY p.post_modified DESC
                 LIMIT %d OFFSET %d",
-                $args['per_page'],
-                $offset
+                array_merge( $where_params, array( $args['per_page'], $offset ) )
             )
         );
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-        // Add thumbnail URLs
+        // One meta query for the page instead of one per row (up to 200).
+        if ( $results ) {
+            update_meta_cache( 'post', wp_list_pluck( $results, 'ID' ) );
+        }
+
         foreach ( $results as &$item ) {
             $item->thumbnail_url = wp_get_attachment_image_url( $item->ID, 'thumbnail' );
             if ( ! $item->thumbnail_url ) {
                 $item->thumbnail_url = wp_mime_type_icon( $item->ID );
             }
             $item->filename = basename( $item->guid );
+
+            // wp_scheduled_delete() only purges rows carrying this meta, so no meta, no date.
+            $trashed_at        = (int) get_post_meta( $item->ID, '_wp_trash_meta_time', true );
+            $item->purge_after = $trashed_at ? $trashed_at + EMPTY_TRASH_DAYS * DAY_IN_SECONDS : 0;
         }
 
         return array(
