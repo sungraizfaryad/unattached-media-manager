@@ -46,11 +46,10 @@ plan, including copying ACF Pro in, since FLP does not have it.
 
 ---
 
-## 1.3.3 — Design content scanning (BUILT, NOT RELEASED)
+## 1.3.3 — Design content scanning (SHIPPED 2026-11-22, SVN r3816797)
 
 Additional CSS, edited Site Editor templates and parts, and Site Editor styles are scanned, plus
-two Replace Media fixes (backslash stripping, `wp-image-12` matching `wp-image-123`). Built and
-tested on FLP 2026-11-22 on branch `feature/1.3.3-design-content`.
+two Replace Media fixes (backslash stripping, `wp-image-12` matching `wp-image-123`).
 Spec: `dev/specs/2026-11-22-design-content-scanning-design.md`.
 
 ---

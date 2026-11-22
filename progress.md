@@ -3,8 +3,7 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 ## Where things stand
 
-**1.3.2 is live** (WP.org SVN r3816583, GitHub `main`, tag `1.3.2`, released 2026-11-22), 300+ installs.
-**1.3.3 is built and tested, not released**, on branch `feature/1.3.3-design-content` (not pushed).
+**1.3.3 is live** (WP.org SVN r3816797, GitHub `main`, tag `1.3.3`, released 2026-11-22), 300+ installs.
 
 ## Done
 
@@ -23,10 +22,10 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 ## Next
 
-1. Sungraiz: merge `feature/1.3.3-design-content` to `main`, push, tag `1.3.3`, deploy (`DEPLOY.md`).
-2. Forum replies (he drafts): Gemini23 x2 (trash deadline urgent), Gal orphan files, kreativelabs, Ade.
-3. 1.4.0 file scanning. REST enum worry is moot; reuse `extract_from_text( $text, true )`.
-4. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
+1. Forum replies (he drafts): Gemini23 x2 (trash deadline urgent), Gal orphan files, kreativelabs, Ade.
+   Gal's sidebar-template case is fixed in 1.3.3.
+2. 1.4.0 file scanning. REST enum worry is moot; reuse `extract_from_text( $text, true )`.
+3. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
 
 ## Key files
 
