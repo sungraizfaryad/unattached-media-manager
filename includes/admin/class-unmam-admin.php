@@ -780,7 +780,7 @@ class UNMAM_Admin {
                                 <?php foreach ( $builtin_types as $slug => $obj ) : ?>
                                     <label style="display:block; margin-bottom:4px;">
                                         <input type="checkbox" name="unmam_scan_post_type[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( in_array( $slug, $scan_post_types_setting, true ) ); ?>>
-                                        <?php echo esc_html( $obj->labels->name ); ?>
+                                        <?php echo esc_html( 'custom_css' === $slug ? __( 'Additional CSS', 'unattached-media-manager' ) : $obj->labels->name ); ?>
                                         <code style="opacity:.7; font-size:11px;"><?php echo esc_html( $slug ); ?></code>
                                     </label>
                                 <?php endforeach; ?>

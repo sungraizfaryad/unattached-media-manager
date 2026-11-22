@@ -38,6 +38,20 @@ function unmam_default_scan_post_types()
 }
 
 /**
+ * Core post types that hold theme design saved through WordPress itself: Additional CSS,
+ * Site Editor templates and parts, and Site Editor styles.
+ *
+ * Kept as a plain function rather than a class constant because the activation hook builds
+ * the default settings before the plugin's classes are loaded.
+ *
+ * @return string[]
+ */
+function unmam_design_post_types()
+{
+    return array('custom_css', 'wp_template', 'wp_template_part', 'wp_global_styles');
+}
+
+/**
  * Post types that may be offered for scanning.
  *
  * Filtering on public => true alone missed two important groups. Builder template types
@@ -50,9 +64,12 @@ function unmam_default_scan_post_types()
  */
 function unmam_get_scannable_post_type_candidates()
 {
+    // The design types are neither public nor show_ui, so the two queries never see them.
+    // post_type_exists() because 5.8 has no template parts or global styles.
     $types = array_unique(array_merge(
         get_post_types(array('public' => true), 'names'),
-        get_post_types(array('show_ui' => true), 'names')
+        get_post_types(array('show_ui' => true), 'names'),
+        array_filter(unmam_design_post_types(), 'post_type_exists')
     ));
 
     // Attachments are the media itself, not a place media is referenced from. The rest
