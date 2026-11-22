@@ -775,25 +775,29 @@ class UNMAM_Database {
 
         list( $where_extra, $where_params ) = self::list_filter_clause( $args );
 
-        $where = "WHERE p.post_type = 'attachment' AND p.post_status = 'trash'" . $where_extra;
+        // Status values go in as placeholders too, so prepare() always has something to bind.
+        $params = array_merge( array( 'attachment', 'trash' ), $where_params );
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $where is fixed SQL plus placeholders; values are bound via prepare
-        $count_sql = "SELECT COUNT(*) FROM {$wpdb->posts} p {$where}";
-        $total     = (int) ( $where_params
-            ? $wpdb->get_var( $wpdb->prepare( $count_sql, $where_params ) )
-            : $wpdb->get_var( $count_sql ) );
+        // $where_extra is fixed SQL with %s placeholders from list_filter_clause(); every value is bound below.
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
+        $total = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) FROM {$wpdb->posts} p WHERE p.post_type = %s AND p.post_status = %s{$where_extra}",
+                $params
+            )
+        );
 
         $results = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT p.ID, p.post_title, p.guid, p.post_date, p.post_mime_type
                 FROM {$wpdb->posts} p
-                {$where}
+                WHERE p.post_type = %s AND p.post_status = %s{$where_extra}
                 ORDER BY p.post_modified DESC
                 LIMIT %d OFFSET %d",
-                array_merge( $where_params, array( $args['per_page'], $offset ) )
+                array_merge( $params, array( $args['per_page'], $offset ) )
             )
         );
-        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        // phpcs:enable
 
         // One meta query for the page instead of one per row (up to 200).
         if ( $results ) {
