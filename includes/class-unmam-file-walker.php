@@ -35,6 +35,10 @@ class UNMAM_File_Walker {
      * not counted, and everything after is taken. The cursor entry was counted by
      * the call that returned it, so a call always makes progress.
      *
+     * A link is followed when its target is inside the root and is not a folder on
+     * the way down to the current position, so a call's result depends only on the
+     * tree and the cursor, never on where the previous call stopped.
+     *
      * 'last' is the relative path of the last entry looked at and counted, whether
      * it was taken, ignored, skipped or a folder; '' when nothing was. Resume with
      * it. 'entries' counts every name looked at, eligible or not.
@@ -131,6 +135,14 @@ class UNMAM_File_Walker {
             return;
         }
 
+        // Listable but not searchable: every child fails to stat, so none would be seen.
+        if ( ! self::can_enter( $dir, $names ) ) {
+            if ( $report ) {
+                $state['skipped'][] = array( 'path' => $rel, 'reason' => 'unreadable' );
+            }
+            return;
+        }
+
         $segment = isset( $cursor[0] ) ? $cursor[0] : null;
         $rest    = array_slice( $cursor, 1 );
 
@@ -169,8 +181,13 @@ class UNMAM_File_Walker {
                 }
                 $state['visited'][ $real ] = true;
                 self::walk_dir( $real, $path, $depth + 1, $is_cursor ? $rest : array(), ! $is_cursor, $state );
+                unset( $state['visited'][ $real ] );
                 if ( $state['stop'] ) {
                     return;
+                }
+            } elseif ( 'unknown' === $kind ) {
+                if ( ! $is_cursor ) {
+                    $state['skipped'][] = array( 'path' => $path, 'reason' => 'unreadable' );
                 }
             } elseif ( 'file' === $kind && ! $is_cursor ) {
                 $problem = self::file_problem( $abs );
@@ -184,8 +201,9 @@ class UNMAM_File_Walker {
     }
 
     /**
-     * What an entry is for the walk: 'dir' to enter, 'file' to read, '' to ignore.
-     * $real gets the resolved folder path for a 'dir'.
+     * What an entry is for the walk: 'dir' to enter, 'file' to read, '' to ignore,
+     * 'unknown' when it cannot be statted at all. $real gets the resolved folder
+     * path for a 'dir'.
      */
     private static function entry_kind( $dir, $name, $abs, $state, &$real ) {
         if ( 0 === strpos( $name, '.' ) ) {
@@ -211,16 +229,39 @@ class UNMAM_File_Walker {
             if ( in_array( $name, self::SKIP_DIRS, true ) ) {
                 return '';
             }
-            if ( $linked && isset( $state['visited'][ $real ] ) ) {
+            // A real folder can also be an ancestor, when a link on the way down led back above it.
+            if ( isset( $state['visited'][ $real ] ) ) {
                 return '';
             }
             return 'dir';
         }
 
-        if ( is_file( $abs ) && self::is_eligible_name( $name ) ) {
-            return 'file';
+        if ( is_file( $abs ) ) {
+            return self::is_eligible_name( $name ) ? 'file' : '';
+        }
+
+        // Not a link, folder or file, and not even there to stat.
+        if ( ! $linked && ! file_exists( $abs ) ) {
+            return 'unknown';
         }
         return '';
+    }
+
+    /**
+     * False when a folder has entries but none of them can be statted, which is
+     * what a folder without the search bit looks like.
+     */
+    private static function can_enter( $dir, $names ) {
+        if ( array() === $names ) {
+            return true;
+        }
+        foreach ( $names as $name ) {
+            $abs = $dir . '/' . $name;
+            if ( is_link( $abs ) || file_exists( $abs ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static function is_eligible_name( $name ) {

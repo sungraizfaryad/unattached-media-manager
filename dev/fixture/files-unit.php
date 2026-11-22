@@ -208,8 +208,13 @@ try {
 			return $res;
 		};
 
+		$tl = $root . '-link';
+		$tp = $root . '-perm';
 		$rm( $root );
 		$rm( $pro );
+		$rm( $tl );
+		$rm( $tl . '-cycle' );
+		$rm( $tp );
 		try {
 			foreach ( array( '10/b.css', '9/a.css', 'a/x.css', 'a-b/y.css', 'a.css', 'doc.md', 'node_modules/n.css', 'vendor/v.css', '.git/g.css', 'chain/c1/c2/c3/z.css' ) as $f ) {
 				$put( $root . '/' . $f );
@@ -275,9 +280,66 @@ try {
 			$ok( array( array( 'path' => $deep, 'reason' => 'too_deep' ) ) === $r['skipped'], 'too-deep folder reported once' );
 			$r = UNMAM_File_Walker::walk( $pro, $deep, 1000, 100000 );
 			$ok( array() === $r['skipped'] && $r['done'], 'cursor on the too-deep folder does not report or enter it' );
+
+			// A link to a sibling folder is walked under both paths, the same way
+			// whether one call does it, a drain does, or a call resumes on the link.
+			$put( $tl . '/a/x.css' );
+			$put( $tl . '/c.css' );
+			symlink( 'a', $tl . '/b' );
+			symlink( '../b', $tl . '/a/back' );
+			$want = array( 'a/x.css', 'b/x.css', 'c.css' );
+			$one  = UNMAM_File_Walker::walk( $tl, '', 1000, 100000 );
+			$ok( $want === $one['files'] && $one['done'], 'sibling link: one call walks both paths' );
+			$d = $drain( $tl, 1 );
+			$ok( $d['done'] && $want === $d['files'], 'sibling link: one-entry drain gives the same list' );
+			$ok( array( 'b/x.css', 'c.css' ) === UNMAM_File_Walker::walk( $tl, 'b', 1000, 100000 )['files'], 'sibling link: resuming on the link' );
+			$ok( array( 'c.css' ) === UNMAM_File_Walker::walk( $tl, 'b/x.css', 1000, 100000 )['files'], 'sibling link: resuming inside the link' );
+			$d = $drain( $tl, 2 );
+			$ok( $d['done'] && $want === $d['files'], 'sibling link: two-entry drain gives the same list' );
+
+			// A real folder that is also an ancestor (reached through links) is not entered again.
+			$put( $tl . '-cycle/0/b.php/f.css' );
+			symlink( '../../0', $tl . '-cycle/0/b.php/lk0' );
+			symlink( '0/b.php', $tl . '-cycle/lk4' );
+			$want = array( '0/b.php/f.css', 'lk4/f.css' );
+			$one  = UNMAM_File_Walker::walk( $tl . '-cycle', '', 1000, 100000 );
+			$ok( $want === $one['files'] && $one['done'], 'link cycle through a real folder: one call' );
+			foreach ( array( 1, 2 ) as $n ) {
+				$d = $drain( $tl . '-cycle', $n );
+				$ok( $d['done'] && $want === $d['files'], "link cycle through a real folder: $n-entry drain" );
+			}
+
+			// A folder that lists but cannot be entered is reported once, and the walk goes on.
+			$put( $tp . '/a.css' );
+			$put( $tp . '/nx/f.css' );
+			$put( $tp . '/nx/g.css' );
+			$put( $tp . '/z.css' );
+			chmod( $tp . '/nx', 0644 );
+			clearstatcache( true );
+			if ( is_executable( $tp . '/nx' ) ) {
+				echo "skip  unreadable folder checks (this user can enter a 0644 folder)\n";
+			} else {
+				$nx = array( array( 'path' => 'nx', 'reason' => 'unreadable' ) );
+				$r  = UNMAM_File_Walker::walk( $tp, '', 1000, 100000 );
+				$ok( array( 'a.css', 'z.css' ) === $r['files'] && $r['done'] && $nx === $r['skipped'], 'folder that cannot be entered is reported' );
+				$d = $drain( $tp, 1 );
+				$ok( $d['done'] && array( 'a.css', 'z.css' ) === $d['files'] && $nx === $d['skipped'], 'unenterable folder reported once across a one-entry drain' );
+				$r = UNMAM_File_Walker::walk( $tp, 'nx', 1000, 100000 );
+				$ok( array( 'z.css' ) === $r['files'] && array() === $r['skipped'], 'cursor on the unenterable folder does not report it again' );
+				$r = UNMAM_File_Walker::walk( $tp, 'a.css', 1000, 100000 );
+				$ok( array( 'z.css' ) === $r['files'] && $nx === $r['skipped'], 'unenterable folder after the cursor is reported' );
+				$r = UNMAM_File_Walker::walk( $tp, 'z.css', 1000, 100000 );
+				$ok( array() === $r['skipped'], 'unenterable folder before the cursor is not reported' );
+			}
 		} finally {
+			if ( is_dir( $tp . '/nx' ) ) {
+				chmod( $tp . '/nx', 0755 );
+			}
 			$rm( $root );
 			$rm( $pro );
+			$rm( $tl );
+			$rm( $tl . '-cycle' );
+			$rm( $tp );
 		}
 	} );
 } finally {
