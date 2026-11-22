@@ -157,3 +157,18 @@ so it may create no tables at all; diff `SHOW TABLES` rather than assuming.
   absolute. Install the previous tag as a second plugin folder and diff the error counts.
   4 pre-existing `NotPrepared` errors are expected: 3 in `get_unused_attachments_detailed()`
   and 1 in the custom-table parser.
+
+## Plugin Check without activating it
+
+Plugin Check 2.1.0 is installed but inactive on FLP. Its `cli.php` alone fatals on a missing
+`WP_PLUGIN_CHECK_PLUGIN_DIR_PATH`, so `dev/plugin-check.php` defines the constants its main file
+would, then loads `cli.php`. Sync the build into FLP first, then:
+
+```bash
+dev/flpwp.sh plugin check unattached-media-manager --require=dev/plugin-check.php \
+  --format=csv --fields=file,line,type,code
+```
+
+Compare against the previous tag rather than reading the list cold: `git archive <tag>` into a
+temp dir, sync that, run the same command, and diff the counts per code. 1.3.1 and 1.3.2 both
+show 279 rows and the same four `PreparedSQL.NotPrepared` errors listed in `ROADMAP.md`.

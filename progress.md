@@ -4,7 +4,8 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 ## Where things stand
 
 **1.3.1 is live** (WP.org SVN r3685086, GitHub `main`, tag `1.3.1`), 300+ installs.
-**1.3.2 is built and tested on FLP, uncommitted, on branch `trash-search`.** Not pushed or deployed.
+**1.3.2 is merged to local `main`, not tagged, not pushed, not deployed.** Plugin Check shows
+nothing new against 1.3.1 (`dev/TESTING.md` has how to run it).
 
 ## Done
 
@@ -25,10 +26,9 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 ## Next
 
-1. Sungraiz reviews 1.3.2; then commit, merge, deploy (`~/Local Sites/plugins/deploy.sh`).
+1. On Sungraiz's go: tag `1.3.2`, push `main` + tag to GitHub, deploy (`~/Local Sites/plugins/deploy.sh`).
 2. Forum replies (he drafts): Gemini23 x2 (trash deadline is urgent), Gal orphan files, kreativelabs nudge, Ade theme caveat.
 3. 1.4.0: theme/plugin file scanning per `dev/ROADMAP.md`.
-4. Local phpcs has no WordPress standard installed, so 1.3.2 was not sniffed; run Plugin Check before deploy.
 
 ## Key files
 
