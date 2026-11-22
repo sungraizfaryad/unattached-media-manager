@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.1
+Stable tag: 1.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -353,6 +353,15 @@ Your parser should implement the `UNMAM_Parser_Interface`.
 
 == Changelog ==
 
+= 1.3.2 =
+**You can now search the trash.**
+
+* **Search and filter in the Trash view.** The same filename, media type and upload date filters as the Unused list, so you can find the few files worth restoring without paging through thousands. Requested by @gemini23.
+* **Restore All and Empty Trash are hidden while a filter is on.** Both act on the whole trash, not just the files shown. Tick what you want back and use Restore Selected, or clear the filter for the whole-trash buttons.
+* **New Auto-delete column in the Trash view.** WordPress permanently deletes trashed files after 30 days by default, without anyone clicking Empty Trash. Each row now shows the date that happens.
+* The In Trash count at the top of the Unused Media tab now opens the Trash view.
+* Switching between Unused, Excluded and Trash clears the filter. A filter set on Unused used to carry into Excluded silently, where no filter bar showed it.
+
 = 1.3.1 =
 **Fixes files sold through WooCommerce product variations being reported as unused.**
 
@@ -472,6 +481,9 @@ This release is mostly about the accuracy of the Unused list, in both directions
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.3.2 =
+Adds search to the Trash view, and shows the date WordPress will permanently delete each trashed file.
 
 = 1.3.1 =
 Files sold through WooCommerce product variations were not scanned and could be listed as unused, because the check only looked at the parent product. Images on hidden or disabled variations were missed too. Re-run a full scan if you sell downloadable products.

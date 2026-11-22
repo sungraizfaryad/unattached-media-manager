@@ -1672,8 +1672,12 @@ class UNMAM_Admin {
 
         if ( 'trash' === $view ) {
             $media = UNMAM_Database::get_trashed_attachments( array(
-                'per_page' => $per_page,
-                'page'     => $current_page,
+                'per_page'  => $per_page,
+                'page'      => $current_page,
+                's'         => $filter_s,
+                'mime_type' => $filter_mime,
+                'date_from' => $filter_date_from,
+                'date_to'   => $filter_date_to,
             ) );
         } else {
             $media = UNMAM_Database::get_unused_attachments_detailed( array(
@@ -1688,6 +1692,19 @@ class UNMAM_Admin {
         }
 
         $total_pages = ceil( $media['total'] / $per_page );
+
+        // Switching view drops the filter. It used to carry over into Excluded, which has no
+        // filter bar, so the list was quietly narrowed with nothing on screen saying why.
+        $view_url = static function ( $target ) {
+            return add_query_arg( array(
+                'view'          => $target,
+                'paged'         => false,
+                'mui_s'         => false,
+                'mui_mime'      => false,
+                'mui_date_from' => false,
+                'mui_date_to'   => false,
+            ) );
+        };
         ?>
 
         <!-- Stats Cards -->
@@ -1696,10 +1713,10 @@ class UNMAM_Admin {
                 <span class="mui-stat-number"><?php echo esc_html( number_format( $unused_count ) ); ?></span>
                 <span class="mui-stat-label"><?php esc_html_e( 'Unused Media', 'unattached-media-manager' ); ?></span>
             </div>
-            <div class="mui-stat-card">
+            <a class="mui-stat-card" href="<?php echo esc_url( $view_url( 'trash' ) ); ?>" style="text-decoration: none; color: inherit;">
                 <span class="mui-stat-number"><?php echo esc_html( number_format( $trash_count ) ); ?></span>
                 <span class="mui-stat-label"><?php esc_html_e( 'In Trash', 'unattached-media-manager' ); ?></span>
-            </div>
+            </a>
         </div>
 
         <!-- Warning Notice -->
@@ -1762,21 +1779,21 @@ class UNMAM_Admin {
             <div class="mui-unused-filters" style="margin-bottom: 15px;">
                 <ul class="subsubsub">
                     <li>
-                        <a href="<?php echo esc_url( add_query_arg( array( 'view' => 'unused', 'paged' => false ) ) ); ?>" <?php echo 'unused' === $view ? 'class="current"' : ''; ?>>
+                        <a href="<?php echo esc_url( $view_url( 'unused' ) ); ?>" <?php echo 'unused' === $view ? 'class="current"' : ''; ?>>
                             <?php esc_html_e( 'Unused', 'unattached-media-manager' ); ?>
                             <span class="count">(<?php echo esc_html( $unused_count ); ?>)</span>
                         </a> |
                     </li>
                     <?php if ( $excluded_count > 0 || 'excluded' === $view ) : ?>
                     <li>
-                        <a href="<?php echo esc_url( add_query_arg( array( 'view' => 'excluded', 'paged' => false ) ) ); ?>" <?php echo 'excluded' === $view ? 'class="current"' : ''; ?>>
+                        <a href="<?php echo esc_url( $view_url( 'excluded' ) ); ?>" <?php echo 'excluded' === $view ? 'class="current"' : ''; ?>>
                             <?php esc_html_e( 'Excluded', 'unattached-media-manager' ); ?>
                             <span class="count">(<?php echo esc_html( $excluded_count ); ?>)</span>
                         </a> |
                     </li>
                     <?php endif; ?>
                     <li>
-                        <a href="<?php echo esc_url( add_query_arg( array( 'view' => 'trash', 'paged' => false ) ) ); ?>" <?php echo 'trash' === $view ? 'class="current"' : ''; ?>>
+                        <a href="<?php echo esc_url( $view_url( 'trash' ) ); ?>" <?php echo 'trash' === $view ? 'class="current"' : ''; ?>>
                             <?php esc_html_e( 'Trash', 'unattached-media-manager' ); ?>
                             <span class="count">(<?php echo esc_html( $trash_count ); ?>)</span>
                         </a>
@@ -1807,7 +1824,11 @@ class UNMAM_Admin {
                         // away to the right. Restore used to sit between Empty Trash and
                         // Delete Permanently, which is a bad place for it when someone is
                         // working through page after page of restores.
+                        // Restore All and Empty Trash act on the whole trash, not on what the
+                        // filter shows, so they go away while one is active. Empty Trash beside
+                        // a three-row search result would read as "empty these three".
                         ?>
+                        <?php if ( ! $has_filters ) : ?>
                         <button type="button" class="button button-primary" id="mui-restore-all">
                             <?php
                             printf(
@@ -1817,16 +1838,19 @@ class UNMAM_Admin {
                             );
                             ?>
                         </button>
-                        <button type="button" class="button" id="mui-restore-selected" disabled>
+                        <?php endif; ?>
+                        <button type="button" class="button<?php echo $has_filters ? ' button-primary' : ''; ?>" id="mui-restore-selected" disabled>
                             <?php esc_html_e( 'Restore Selected', 'unattached-media-manager' ); ?>
                         </button>
                         <span class="mui-danger-zone">
                             <button type="button" class="button button-link-delete" id="mui-delete-selected-permanently" disabled>
                                 <?php esc_html_e( 'Delete Permanently', 'unattached-media-manager' ); ?>
                             </button>
+                            <?php if ( ! $has_filters ) : ?>
                             <button type="button" class="button button-link-delete" id="mui-empty-trash">
                                 <?php esc_html_e( 'Empty Trash', 'unattached-media-manager' ); ?>
                             </button>
+                            <?php endif; ?>
                         </span>
                     <?php elseif ( 'unused' === $view && $unused_count > 0 ) : ?>
                         <?php if ( ! $has_filters && $trash_available ) : ?>
@@ -1854,12 +1878,14 @@ class UNMAM_Admin {
 
             <div style="clear: both;"></div>
 
-            <?php if ( 'unused' === $view ) : ?>
-            <!-- Filter form (Unused view only) -->
+            <?php if ( 'unused' === $view || ( 'trash' === $view && ( $trash_count > 0 || $has_filters ) ) ) : ?>
             <form method="get" class="mui-unused-filter-form" style="margin: 10px 0 15px; padding: 12px; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px;">
                 <input type="hidden" name="page" value="unattached-media-manager">
                 <input type="hidden" name="tab" value="unused">
-                <input type="hidden" name="view" value="unused">
+                <input type="hidden" name="view" value="<?php echo esc_attr( $view ); ?>">
+                <?php if ( 20 !== $per_page ) : ?>
+                <input type="hidden" name="mui_per_page" value="<?php echo esc_attr( $per_page ); ?>">
+                <?php endif; ?>
 
                 <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
                     <div>
@@ -1912,14 +1938,28 @@ class UNMAM_Admin {
                             <?php esc_html_e( 'Filter', 'unattached-media-manager' ); ?>
                         </button>
                         <?php if ( $has_filters ) : ?>
-                            <a href="<?php echo esc_url( admin_url( 'upload.php?page=unattached-media-manager&tab=unused&view=unused' ) ); ?>" class="button">
+                            <a href="<?php echo esc_url( admin_url( 'upload.php?page=unattached-media-manager&tab=unused&view=' . $view ) ); ?>" class="button">
                                 <?php esc_html_e( 'Clear', 'unattached-media-manager' ); ?>
                             </a>
                         <?php endif; ?>
                     </div>
                 </div>
 
-                <?php if ( $has_filters ) : ?>
+                <?php if ( $has_filters && 'trash' === $view ) : ?>
+                    <p style="margin: 10px 0 0; color: #50575e; font-size: 13px;">
+                        <?php
+                        printf(
+                            /* translators: 1: number of matching trashed files, 2: total number of files in the trash */
+                            esc_html( _n( 'Showing %1$d matching file in the trash (of %2$d total).', 'Showing %1$d matching files in the trash (of %2$d total).', intval( $media['total'] ), 'unattached-media-manager' ) ),
+                            intval( $media['total'] ),
+                            intval( $trash_count )
+                        );
+                        ?>
+                        <?php if ( $media['total'] > 0 ) : ?>
+                            <?php esc_html_e( 'Tick the files you want back and use Restore Selected. Clear the filter to restore or empty the whole trash.', 'unattached-media-manager' ); ?>
+                        <?php endif; ?>
+                    </p>
+                <?php elseif ( $has_filters ) : ?>
                     <p style="margin: 10px 0 0; color: #50575e; font-size: 13px;">
                         <?php
                         printf(
@@ -1949,6 +1989,11 @@ class UNMAM_Admin {
                             <th><?php esc_html_e( 'Size', 'unattached-media-manager' ); ?></th>
                             <?php endif; ?>
                             <th><?php esc_html_e( 'Date', 'unattached-media-manager' ); ?></th>
+                            <?php if ( 'trash' === $view ) : ?>
+                            <th title="<?php esc_attr_e( 'WordPress permanently deletes trashed files after this date, without anyone clicking Empty Trash.', 'unattached-media-manager' ); ?>">
+                                <?php esc_html_e( 'Auto-delete', 'unattached-media-manager' ); ?>
+                            </th>
+                            <?php endif; ?>
                             <th><?php esc_html_e( 'Actions', 'unattached-media-manager' ); ?></th>
                         </tr>
                     </thead>
@@ -1988,6 +2033,20 @@ class UNMAM_Admin {
                                 echo esc_html( wp_date( get_option( 'date_format' ), $upload_date ) );
                                 ?>
                             </td>
+                            <?php if ( 'trash' === $view ) : ?>
+                            <td>
+                                <?php
+                                if ( empty( $item->purge_after ) ) {
+                                    echo '&mdash;';
+                                } elseif ( $item->purge_after <= time() ) {
+                                    // Past due; the daily cleanup just hasn't run yet.
+                                    echo '<strong style="color: #b32d2e;">' . esc_html__( 'Any time now', 'unattached-media-manager' ) . '</strong>';
+                                } else {
+                                    echo esc_html( wp_date( get_option( 'date_format' ), $item->purge_after ) );
+                                }
+                                ?>
+                            </td>
+                            <?php endif; ?>
                             <td>
                                 <?php if ( 'trash' === $view ) : ?>
                                     <button type="button" class="button button-small mui-restore-single" data-id="<?php echo esc_attr( $item->ID ); ?>">
@@ -2059,7 +2118,9 @@ class UNMAM_Admin {
             <?php else : ?>
             <p class="description" style="padding: 20px; text-align: center;">
                 <?php
-                if ( 'trash' === $view ) {
+                if ( 'trash' === $view && $has_filters ) {
+                    esc_html_e( 'Nothing in the trash matches the current filters.', 'unattached-media-manager' );
+                } elseif ( 'trash' === $view ) {
                     esc_html_e( 'Trash is empty.', 'unattached-media-manager' );
                 } elseif ( $has_filters ) {
                     esc_html_e( 'No unused media matches the current filters. Try a broader filename, different media type, or wider date range.', 'unattached-media-manager' );
