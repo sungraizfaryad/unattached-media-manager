@@ -119,8 +119,6 @@ class UNMAM_Attachment_Manager {
      * @return array Results array.
      */
     public function replace_references( $old_attachment_id, $new_attachment_id, $dry_run = false ) {
-        global $wpdb;
-
         $old_attachment = get_post( $old_attachment_id );
         $new_attachment = get_post( $new_attachment_id );
 
@@ -153,27 +151,43 @@ class UNMAM_Attachment_Manager {
         // Get references from our index
         $references = UNMAM_Database::get_references_for_attachment( $old_attachment_id, array( 'per_page' => 1000 ) );
 
+        $post_ids   = array();
+        $term_ids   = array();
+        $has_option = false;
+
         foreach ( $references as $ref ) {
             $replace_result = $this->replace_single_reference( $ref, $old_attachment_id, $new_attachment_id, $old_urls, $new_url, $dry_run );
 
             if ( $replace_result['success'] ) {
                 $results['replaced'][] = $replace_result;
                 $results['total_count']++;
+
+                if ( 'post' === $ref['source_type'] ) {
+                    $post_ids[ (int) $ref['source_id'] ] = true;
+                } elseif ( 'term' === $ref['source_type'] ) {
+                    $term_ids[ (int) $ref['source_id'] ] = true;
+                }
+                if ( 'option' === $ref['context_type'] ) {
+                    $has_option = true;
+                }
             } else {
                 $results['errors'][] = $replace_result;
             }
         }
 
         if ( ! $dry_run && $results['total_count'] > 0 ) {
-            // Update our reference index
-            $table = UNMAM_Database::get_table_name( 'references' );
-            $wpdb->update(
-                $table,
-                array( 'attachment_id' => $new_attachment_id ),
-                array( 'attachment_id' => $old_attachment_id ),
-                array( '%d' ),
-                array( '%d' )
-            );
+            // Rows this run could not rewrite (custom tables, theme files) still hold the
+            // old image, so only the sources that changed are rebuilt.
+            $scanner = UNMAM_Scanner::instance();
+            foreach ( array_keys( $post_ids ) as $post_id ) {
+                $scanner->index_post( $post_id );
+            }
+            foreach ( array_keys( $term_ids ) as $term_id ) {
+                $scanner->index_term( $term_id );
+            }
+            if ( $has_option ) {
+                $scanner->index_options();
+            }
 
             /**
              * Fires after references are replaced
