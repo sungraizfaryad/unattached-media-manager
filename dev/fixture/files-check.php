@@ -9,9 +9,10 @@
  *   settings  the scan_files setting: untick, untick mid-pass, retick, upgrade shape
  *   display   Where Used for file rows: titles, who sees what, Replace Media, with a temporary
  *             author and contributor and the fixture plugin folder removed for a moment
+ *   notices   the not-scanned, changed and not-read notices, and the hooks that set "changed"
  *
  * Every mode puts settings and fixture files back before it exits.
- * Run: dev/flpwp.sh eval-file dev/fixture/files-check.php [tiny|pause|settings|display]
+ * Run: dev/flpwp.sh eval-file dev/fixture/files-check.php [tiny|pause|settings|display|notices]
  */
 
 $mode = empty( $args ) ? '' : $args[0];
@@ -352,6 +353,173 @@ if ( 'display' === $mode ) {
 	$ok( is_file( $plugin_file ) && $plugin_body === file_get_contents( $plugin_file ), 'cleanup: the fixture plugin is back' );
 	$ok( $orig_author === (int) get_post_field( 'post_author', $own ), 'cleanup: the image has its first author' );
 	$ok( ! get_user_by( 'login', 'unmamfix-author' ) && ! get_user_by( 'login', 'unmamfix-contributor' ), 'cleanup: both temporary users are gone' );
+	$ok( ! $notices, 'no notices or warnings from the plugin' . ( $notices ? ': ' . $notices[0] : '' ) );
+	echo "\nfailures: $fail\n";
+	return;
+}
+
+if ( 'notices' === $mode ) {
+	echo "-- notices\n";
+	if ( ! class_exists( 'UNMAM_Admin' ) ) {
+		require_once UNMAM_PLUGIN_DIR . 'includes/admin/class-unmam-admin.php';
+	}
+
+	$admin_id   = (int) get_users( array( 'role' => 'administrator', 'number' => 1, 'orderby' => 'ID', 'fields' => 'ID' ) )[0];
+	$reader_id  = (int) get_users( array( 'role' => 'contributor', 'number' => 1, 'orderby' => 'ID', 'fields' => 'ID' ) )[0]; // Only ever read as.
+	$was        = array(
+		'scanned' => get_option( 'unmam_files_scanned_at', null ),
+		'changed' => get_option( 'unmam_files_changed_at', null ),
+		'state'   => get_option( UNMAM_File_Scanner::STATE_OPTION, null ),
+	);
+	$notice_state = function () {
+		return UNMAM_File_Scanner::notice_state();
+	};
+	$html_for = function ( $tab = 'unused' ) {
+		ob_start();
+		UNMAM_Admin::instance()->render_file_scan_notices( $tab );
+		return ob_get_clean();
+	};
+
+	// Fires a hook with only this plugin's own callbacks on it. Core hangs update checks that
+	// call api.wordpress.org on upgrader_process_complete, and other plugins hang their own.
+	$fire = function ( $hook, array $args ) {
+		global $wp_filter;
+		$saved = isset( $wp_filter[ $hook ] ) ? $wp_filter[ $hook ] : null;
+		if ( $saved ) {
+			$ours = new WP_Hook();
+			foreach ( $saved->callbacks as $priority => $callbacks ) {
+				foreach ( $callbacks as $cb ) {
+					$fn    = $cb['function'];
+					$owner = is_array( $fn ) ? ( is_object( $fn[0] ) ? get_class( $fn[0] ) : (string) $fn[0] ) : '';
+					if ( 0 === strpos( $owner, 'UNMAM_' ) || 'Unattached_Media_Manager' === $owner ) {
+						$ours->add_filter( $hook, $fn, $priority, $cb['accepted_args'] );
+					}
+				}
+			}
+			$wp_filter[ $hook ] = $ours;
+		}
+		try {
+			do_action_ref_array( $hook, $args );
+		} finally {
+			if ( $saved ) {
+				$wp_filter[ $hook ] = $saved;
+			}
+		}
+	};
+	$upgraded = function ( $extra ) use ( $fire ) {
+		$fire( 'upgrader_process_complete', array( null, $extra ) );
+	};
+
+	try {
+		$set_settings( array( 'scan_files' => true ) );
+
+		delete_option( 'unmam_files_scanned_at' );
+		delete_option( 'unmam_files_changed_at' );
+		$ok( $notice_state()['never_scanned'], 'never scanned' );
+		wp_set_current_user( $admin_id );
+		$html = $html_for();
+		$ok( false !== strpos( $html, 'Theme and plugin files have not been scanned yet. Run a full scan before deleting anything.' ) && false !== strpos( $html, 'notice notice-warning' ), 'never scanned: admin notice, exact copy' );
+		$ok( '' === $html_for( 'settings' ), 'never scanned: nothing on the settings tab' );
+
+		$ok( $run_full_pass(), 'a files pass finished' );
+		$ok( ! $notice_state()['never_scanned'] && ! $notice_state()['changed'], 'clean after a pass' );
+		$ok( false === strpos( $html_for(), 'have not been scanned' ) && false === strpos( $html_for(), 'changed since the last scan' ), 'clean after a pass: neither notice shows' );
+
+		sleep( 1 );
+		$upgraded( array( 'type' => 'translation' ) );
+		$ok( ! $notice_state()['changed'], 'translation update ignored' );
+		$upgraded( array() );
+		$upgraded( array( 'type' => 'core' ) );
+		$ok( ! $notice_state()['changed'] && false === get_option( 'unmam_files_changed_at' ), 'an update without a type, and a core update, ignored' );
+
+		$upgraded( array( 'type' => 'plugin', 'action' => 'update' ) );
+		$ok( $notice_state()['changed'], 'changed after a plugin update' );
+		$html = $html_for();
+		$ok( false !== strpos( $html, 'Themes or plugins changed since the last scan. Run a scan before deleting anything.' ), 'changed: admin notice, exact copy' );
+		$ok( '' === $html_for( 'settings' ), 'changed: nothing on the settings tab' );
+		$autoload = (string) $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", 'unmam_files_changed_at' ) );
+		$ok( in_array( $autoload, array( 'no', 'off' ), true ), 'unmam_files_changed_at is not autoloaded (' . $autoload . ')' );
+
+		// The other ways a theme or plugin changes. Each is cleared by hand, not by a pass.
+		foreach ( array(
+			'theme update'  => function () use ( $upgraded ) {
+				$upgraded( array( 'type' => 'theme', 'action' => 'update' ) );
+			},
+			'plugin delete' => function () use ( $fire ) {
+				$fire( 'deleted_plugin', array( 'unmamfix/unmamfix.php', true ) );
+			},
+			'theme delete'  => function () use ( $fire ) {
+				$fire( 'deleted_theme', array( 'unmamfix-theme', true ) );
+			},
+		) as $what => $do ) {
+			delete_option( 'unmam_files_changed_at' );
+			$ok( ! $notice_state()['changed'], "$what: precondition, nothing changed" );
+			sleep( 1 );
+			$do();
+			$ok( $notice_state()['changed'], "changed after a $what" );
+		}
+
+		$ok( $run_full_pass(), 'a second files pass finished' );
+		$ok( ! $notice_state()['changed'], 'cleared by the next pass' );
+		$ok( ! empty( $notice_state()['skipped']['items'] ), 'skipped list exposed' );
+
+		// The not-read notice, as an administrator.
+		wp_set_current_user( $admin_id );
+		$html = $html_for();
+		$ok( false !== strpos( $html, 'could not be read' ) && false !== strpos( $html, 'huge.css' ), 'admin notice lists skipped file' );
+		$ok( false !== strpos( $html, 'Unmam Fixture Theme (inactive): huge.css: over 10 MB' ), 'admin notice: title, path and reason' );
+		$ok( '' === $html_for( 'settings' ), 'not read: nothing on the settings tab' );
+
+		// Someone who cannot activate plugins gets the generic title and no path.
+		wp_set_current_user( $reader_id );
+		$html = $html_for();
+		$ok( false !== strpos( $html, 'could not be read' ) && false === strpos( $html, 'huge.css' ) && false === strpos( $html, 'Unmam Fixture' ) && false !== strpos( $html, 'Theme or plugin file: over 10 MB' ), 'not read, as a non-admin: generic title, no path' );
+		wp_set_current_user( $admin_id );
+
+		// A crafted state: every reason, a component skipped as a whole, more than ten, then one.
+		$state                  = $state_of();
+		$state['skipped']       = array();
+		$state['skipped_total'] = 0;
+		foreach ( array( 'too_big', 'unreadable', 'too_deep', 'stopped' ) as $i => $reason ) {
+			$state['skipped'][] = array( 'key' => $theme, 'path' => "css/r$i.css", 'reason' => $reason );
+		}
+		$state['skipped'][] = array( 'key' => $theme, 'path' => '', 'reason' => 'stopped' );
+		$state['skipped'][] = array( 'key' => 'mu', 'path' => '', 'reason' => 'unreadable' );
+		for ( $i = 6; $i < 12; $i++ ) {
+			$state['skipped'][] = array( 'key' => $theme, 'path' => "css/r$i.css", 'reason' => 'too_big' );
+		}
+		$state['skipped_total'] = 40;
+		update_option( UNMAM_File_Scanner::STATE_OPTION, $state, false );
+		$html = $html_for();
+		$ok( false !== strpos( $html, '40 theme or plugin files could not be read, so images used only in them may be listed as unused.' ), 'crafted state: the total is in the sentence' );
+		$ok( 10 === substr_count( $html, '<li>' ), 'crafted state: ten lines, not twelve (' . substr_count( $html, '<li>' ) . ')' );
+		$ok( false !== strpos( $html, 'css/r0.css: over 10 MB' ) && false !== strpos( $html, 'css/r1.css: unreadable' ) && false !== strpos( $html, 'css/r2.css: folder too deep' ) && false !== strpos( $html, 'css/r3.css: stopped the scan' ), 'crafted state: the four reasons read right' );
+		$ok( false !== strpos( $html, '<li>Unmam Fixture Theme (inactive): stopped the scan</li>' ) && false !== strpos( $html, '<li>Must-use plugins: unreadable</li>' ), 'crafted state: a component skipped as a whole shows its name alone' );
+		$state['skipped']       = array( array( 'key' => $theme, 'path' => '<b>x</b>.css', 'reason' => 'unreadable' ) );
+		$state['skipped_total'] = 1;
+		update_option( UNMAM_File_Scanner::STATE_OPTION, $state, false );
+		$html = $html_for();
+		$ok( false !== strpos( $html, '1 theme or plugin file could not be read' ) && false === strpos( $html, '<b>' ) && false !== strpos( $html, '&lt;b&gt;x&lt;/b&gt;.css' ), 'crafted state: one file reads in the singular, and a path is escaped' );
+
+		// Off means off: no notice and an empty state, whatever the options hold.
+		delete_option( 'unmam_files_scanned_at' );
+		UNMAM_File_Scanner::mark_changed();
+		$set_settings( array( 'scan_files' => false ) );
+		$off = $notice_state();
+		$ok( ! $off['never_scanned'] && ! $off['changed'] && ! $off['skipped']['items'] && 0 === $off['skipped']['total'], 'scan_files off: notice_state is all false and empty' );
+		$ok( '' === $html_for(), 'scan_files off: nothing is printed' );
+	} finally {
+		foreach ( array( 'scanned' => 'unmam_files_scanned_at', 'changed' => 'unmam_files_changed_at', 'state' => UNMAM_File_Scanner::STATE_OPTION ) as $k => $name ) {
+			if ( null === $was[ $k ] ) {
+				delete_option( $name );
+			} else {
+				update_option( $name, $was[ $k ], false );
+			}
+		}
+		update_option( 'unmam_settings', $saved_settings );
+		wp_set_current_user( 0 );
+	}
+
 	$ok( ! $notices, 'no notices or warnings from the plugin' . ( $notices ? ': ' . $notices[0] : '' ) );
 	echo "\nfailures: $fail\n";
 	return;

@@ -313,6 +313,11 @@ final class Unattached_Media_Manager
         add_action('deleted_term_meta', array($this, 'on_term_meta_update'), 10, 4);
         add_action('delete_term', array($this, 'on_term_delete'), 10, 3);
 
+        // Theme and plugin changes the file scan has not seen yet
+        add_action('upgrader_process_complete', array($this, 'on_upgrade_complete'), 10, 2);
+        add_action('deleted_plugin', array('UNMAM_File_Scanner', 'mark_changed'));
+        add_action('deleted_theme', array('UNMAM_File_Scanner', 'mark_changed'));
+
         // ACF specific hooks
         add_action('acf/save_post', array($this, 'on_acf_save'), 20);
     }
@@ -523,6 +528,19 @@ final class Unattached_Media_Manager
 
         // Taxonomy isn't known here; index_term() resolves it from the term.
         wp_schedule_single_event(time() + 5, 'unmam_index_single_term', array($object_id));
+    }
+
+    /**
+     * Note a theme or plugin install or update, so the file scan notice asks for a new scan.
+     *
+     * @param WP_Upgrader $upgrader   Upgrader instance, not used.
+     * @param array       $hook_extra What was upgraded; type is plugin, theme, core or translation.
+     */
+    public function on_upgrade_complete($upgrader, $hook_extra)
+    {
+        if (is_array($hook_extra) && isset($hook_extra['type']) && in_array($hook_extra['type'], array('theme', 'plugin'), true)) {
+            UNMAM_File_Scanner::mark_changed();
+        }
     }
 
     /**

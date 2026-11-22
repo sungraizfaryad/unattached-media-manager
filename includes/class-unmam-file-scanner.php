@@ -392,6 +392,90 @@ class UNMAM_File_Scanner {
     }
 
     /**
+     * Note that a theme or plugin changed, so the notice asks for a new scan.
+     */
+    public static function mark_changed(): void {
+        update_option( 'unmam_files_changed_at', time(), false );
+    }
+
+    /**
+     * What the admin notices and `wp unmam status` report about the file scan.
+     *
+     * Everything is false or empty while the scan is switched off.
+     *
+     * @return array array( 'never_scanned' => bool, 'changed' => bool, 'skipped' => skipped() ).
+     */
+    public static function notice_state(): array {
+        $state = array(
+            'never_scanned' => false,
+            'changed'       => false,
+            'skipped'       => array(
+                'total' => 0,
+                'items' => array(),
+            ),
+        );
+
+        if ( empty( Unattached_Media_Manager::get_setting( 'scan_files' ) ) ) {
+            return $state;
+        }
+
+        $scanned = (int) get_option( 'unmam_files_scanned_at', 0 );
+
+        $state['never_scanned'] = 0 === $scanned;
+        $state['changed']       = (int) get_option( 'unmam_files_changed_at', 0 ) > $scanned;
+        $state['skipped']       = self::skipped();
+
+        return $state;
+    }
+
+    /**
+     * The sentence that says how many files the scan could not read.
+     */
+    public static function skipped_summary( int $total ): string {
+        return sprintf(
+            /* translators: %d: number of theme and plugin files the scan could not read */
+            _n(
+                '%d theme or plugin file could not be read, so images used only in it may be listed as unused.',
+                '%d theme or plugin files could not be read, so images used only in them may be listed as unused.',
+                $total,
+                'unattached-media-manager'
+            ),
+            $total
+        );
+    }
+
+    /**
+     * One item of skipped() as a line of text, for the notice and the CLI.
+     *
+     * The title comes from describe(), so a user who may not see paths gets the generic one.
+     *
+     * @param array $item Item with key, path and reason.
+     * @return string For example "Some Theme: css/a.css: over 10 MB".
+     */
+    public static function skipped_line( array $item ): string {
+        switch ( $item['reason'] ) {
+            case 'too_big':
+                $reason = __( 'over 10 MB', 'unattached-media-manager' );
+                break;
+            case 'too_deep':
+                $reason = __( 'folder too deep', 'unattached-media-manager' );
+                break;
+            case 'stopped':
+                $reason = __( 'stopped the scan', 'unattached-media-manager' );
+                break;
+            default:
+                $reason = __( 'unreadable', 'unattached-media-manager' );
+        }
+
+        return sprintf(
+            /* translators: 1: theme or plugin file, 2: why the scan could not read it */
+            __( '%1$s: %2$s', 'unattached-media-manager' ),
+            self::describe( $item['key'] . '|' . $item['path'] )['title'],
+            $reason
+        );
+    }
+
+    /**
      * The context_key of a file row: component key and relative path joined by a pipe.
      *
      * Both parts come from disk, and wpdb refuses a row whose fields hold invalid UTF-8 or are

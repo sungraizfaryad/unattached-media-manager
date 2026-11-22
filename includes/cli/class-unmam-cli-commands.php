@@ -123,6 +123,15 @@ class UNMAM_CLI_Commands {
         WP_CLI::log( sprintf( 'Referenced: %d', $stats['referenced_attachments'] ) );
         WP_CLI::log( sprintf( 'Potentially unused: %d', $stats['unused_attachments'] ) );
         WP_CLI::log( sprintf( 'Total references found: %d', $stats['total_references'] ) );
+
+        $skipped = UNMAM_File_Scanner::notice_state()['skipped'];
+        if ( $skipped['total'] > 0 ) {
+            WP_CLI::log( '' );
+            WP_CLI::warning( UNMAM_File_Scanner::skipped_summary( $skipped['total'] ) );
+            foreach ( array_slice( $skipped['items'], 0, 10 ) as $item ) {
+                WP_CLI::log( '  - ' . UNMAM_File_Scanner::skipped_line( $item ) );
+            }
+        }
     }
 
     /**
@@ -622,6 +631,15 @@ class UNMAM_CLI_Commands {
                     $s['total_items'] ?? 0
                 ) );
             }
+        }
+
+        if ( Unattached_Media_Manager::get_setting( 'scan_files' ) ) {
+            $files = UNMAM_File_Scanner::notice_state();
+
+            WP_CLI::log( '' );
+            WP_CLI::log( sprintf( 'Theme and plugin files: %s', $files['never_scanned'] ? 'never scanned' : 'scanned' ) );
+            WP_CLI::log( sprintf( 'Changed since the last scan: %s', $files['changed'] ? 'yes' : 'no' ) );
+            WP_CLI::log( sprintf( 'Files not read: %d', $files['skipped']['total'] ) );
         }
     }
 }

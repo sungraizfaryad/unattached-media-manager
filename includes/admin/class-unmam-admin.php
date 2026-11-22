@@ -274,12 +274,59 @@ class UNMAM_Admin {
         );
     }
 
+    /**
+     * Warn when theme and plugin files have not been scanned, have changed since, or could not be read.
+     *
+     * Images used only by those files are listed as unused until a scan has looked at them.
+     *
+     * @param string $current_tab Tab being rendered.
+     */
+    public function render_file_scan_notices( $current_tab ) {
+        if ( 'settings' === $current_tab ) {
+            return;
+        }
+
+        $state = UNMAM_File_Scanner::notice_state();
+
+        // With no scan yet there is nothing to be out of date, so one notice is enough.
+        if ( $state['never_scanned'] ) {
+            printf(
+                '<div class="notice notice-warning"><p>%s</p></div>',
+                esc_html__( 'Theme and plugin files have not been scanned yet. Run a full scan before deleting anything.', 'unattached-media-manager' )
+            );
+        } elseif ( $state['changed'] ) {
+            printf(
+                '<div class="notice notice-warning"><p>%s</p></div>',
+                esc_html__( 'Themes or plugins changed since the last scan. Run a scan before deleting anything.', 'unattached-media-manager' )
+            );
+        }
+
+        $total = (int) $state['skipped']['total'];
+        if ( $total < 1 ) {
+            return;
+        }
+
+        echo '<div class="notice notice-warning"><p>' . esc_html( UNMAM_File_Scanner::skipped_summary( $total ) ) . '</p>';
+
+        $items = array_slice( $state['skipped']['items'], 0, 10 );
+        if ( $items ) {
+            echo '<ul class="ul-disc">';
+            foreach ( $items as $item ) {
+                echo '<li>' . esc_html( UNMAM_File_Scanner::skipped_line( $item ) ) . '</li>';
+            }
+            echo '</ul>';
+        }
+
+        echo '</div>';
+    }
+
     public function render_admin_page() {
         // Determine current tab
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Tab navigation, no action taken
         $current_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'dashboard';
 
         $this->render_unscanned_post_types_notice( $current_tab );
+        $this->render_file_scan_notices( $current_tab );
 
         // Handle settings save
         if ( 'settings' === $current_tab && isset( $_POST['unmam_save_settings'] ) && check_admin_referer( 'unmam_settings_nonce' ) ) {
