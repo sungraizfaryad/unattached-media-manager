@@ -3,9 +3,8 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 ## Where things stand
 
-**1.3.1 is live** (WP.org SVN r3685086, GitHub `main`, tag `1.3.1`), 300+ installs.
-**1.3.2 is merged to local `main`, not tagged, not pushed, not deployed.** Plugin Check shows
-nothing new against 1.3.1 (`dev/TESTING.md` has how to run it).
+**1.3.2 is live** (WP.org SVN r3816583, GitHub `main`, tag `1.3.2`, released 2026-11-22),
+300+ installs. Plugin Check showed nothing new against 1.3.1 (`dev/TESTING.md` has how to run it).
 
 ## Done
 
@@ -26,7 +25,7 @@ nothing new against 1.3.1 (`dev/TESTING.md` has how to run it).
 
 ## Next
 
-1. On Sungraiz's go: tag `1.3.2`, push `main` + tag to GitHub, deploy (`~/Local Sites/plugins/deploy.sh`).
+1. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
 2. Forum replies (he drafts): Gemini23 x2 (trash deadline is urgent), Gal orphan files, kreativelabs nudge, Ade theme caveat.
 3. 1.4.0: theme/plugin file scanning per `dev/ROADMAP.md`.
 
