@@ -9,8 +9,6 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 - 1.3.3: Additional CSS, edited templates/parts and Site Editor styles scanned; Replace Media keeps
   backslashes, unserializes without classes, no longer hits `wp-image-123` when replacing 12.
-- 1.3.3 tests on FLP: design fixture direct + batch + untick/retick, upgrade check, settings page,
-  replace-slash, old fixture 6 of 7 (only `themecss`), Plugin Check identical to 1.3.2 (279 rows).
 - 1.3.2 trash search, 1.3.0 terms scanning, 1.3.1 WooCommerce variation downloads (see changelog).
 
 ## Decisions
@@ -19,15 +17,18 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
   attach queries the plan named, so the dashboard and the attach list agree.
 - Design clause is held in a variable and interpolated; concatenating it added 10 Plugin Check errors.
 - Gal's "Beyond the media library" (orphan files on disk) is NOT the 1.4.0 filesystem scan.
+- 1.4.0 also fixes Replace Media moving rows it could not change, and the usage AJAX capability gap.
 
 ## Next
 
 1. Forum replies (he drafts): Gemini23 x2 (trash deadline urgent), Gal orphan files, kreativelabs, Ade.
-   Gal's sidebar-template case is fixed in 1.3.3.
-2. 1.4.0 file scanning. REST enum worry is moot; reuse `extract_from_text( $text, true )`.
+   Gal's sidebar is fixed by 1.3.3 only if he edited it in the Site Editor; on disk it needs 1.4.0.
+2. 1.4.0 file scanning: spec and plan approved 2026-11-22 on `feature/1.4.0-file-scanning`, not built.
+   Build with subagent-driven execution in a fresh chat (handoff note has the paste line).
 3. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
 
 ## Key files
 
+- `dev/specs/2026-11-22-file-scanning-design.md`, `dev/plans/2026-11-22-file-scanning.md` (1.4.0).
 - `dev/specs/2026-11-22-design-content-scanning-design.md`, `dev/plans/2026-11-22-design-content-scanning.md`.
 - `dev/fixture/design-*.php`, `dev/fixture/replace-slash.php`, `dev/TESTING.md`.

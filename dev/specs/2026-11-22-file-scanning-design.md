@@ -63,8 +63,6 @@ with the pass state so a plugin installed mid-pass cannot shift positions:
 - Plugins come from listing `WP_PLUGIN_DIR`, not from `get_plugins()`, which skips a folder
   whose main file has no valid header. Names come from `get_plugins()` where it knows the
   folder, otherwise the folder name.
-- Each component also records its URL root (`get_stylesheet_directory_uri()`,
-  `plugins_url()`, `WPMU_PLUGIN_URL`) for resolving relative paths.
 - This plugin's own folder is left out (`dirname( UNMAM_PLUGIN_BASENAME )`). Its readme and
   parsers mention sample upload URLs.
 - Never scanned: `wp-admin`, `wp-includes`, the uploads folder, drop-ins at the root of
@@ -144,17 +142,18 @@ Candidates, by file type:
 
 - All files: `wp-image-{ID}` classes, absolute media URLs, and root- and protocol-relative
   upload URLs, exactly as `extract_from_text( $text, true )` finds them.
-- All files, new: an **uploads tail**, the uploads folder name followed by a path to a media
-  file (`uploads/2024/01/bg.jpg`, from `../../uploads/...`, `content_url( '/uploads/...' )`,
+- All files, new: an **uploads tail**, the uploads anchor followed by a path to a media file
+  (`uploads/2024/01/bg.jpg`, from `../../uploads/...`, `content_url( '/uploads/...' )`,
   `WP_CONTENT_URL . '/uploads/...'`). The tail is rebuilt against the uploads `baseurl` and
   resolved with the filename fallback **off**, so only an exact library file counts. The
-  folder name is the last segment of the uploads `baseurl` path; uploads served from a domain
-  root skip this. A lookbehind keeps it off the tail of a full URL already matched.
-- CSS-like files (`css scss sass less html htm`), new: a `url(...)` value or `src`/`href`
-  attribute starting with `./` or `../` is resolved against the file's URL (component URL root
-  plus its folder), dot segments collapsed. It counts only if the result is under the uploads
-  `baseurl`, and is resolved with the fallback off. The browser resolves these against the
-  stylesheet's URL, not the disk path, so this works for linked plugin folders too.
+  anchor is the `baseurl` path relative to `content_url()` when that is a prefix (`uploads`,
+  or `uploads/sites/2` on a multisite subsite), else its last segment; uploads served from a
+  domain root have no anchor and skip this. Spans already matched as full or root-relative
+  URLs are blanked first so they are not matched twice.
+- This also covers `url(../../uploads/...)` in stylesheets. A theme or plugin file can only
+  reach the uploads folder by a relative path that passes through the anchor, so resolving
+  `./` and `../` against each file's URL would find nothing more. Planning dropped it for that
+  reason.
 - `.php` files, new: a literal integer, quoted or not, as the first argument of
   `wp_get_attachment_image`, `wp_get_attachment_image_src`, `wp_get_attachment_image_url`,
   `wp_get_attachment_url`, `wp_get_attachment_link`, `wp_get_attachment_metadata`,
