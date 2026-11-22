@@ -13,9 +13,6 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 ## Decisions
 
-- Design posts are excluded from the dashboard used-but-unattached count too, not just the four
-  attach queries the plan named, so the dashboard and the attach list agree.
-- Design clause is held in a variable and interpolated; concatenating it added 10 Plugin Check errors.
 - Gal's "Beyond the media library" (orphan files on disk) is NOT the 1.4.0 filesystem scan.
 - 1.4.0 also fixes Replace Media moving rows it could not change, and the usage AJAX capability gap.
 
@@ -30,5 +27,4 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 ## Key files
 
 - `dev/specs/2026-11-22-file-scanning-design.md`, `dev/plans/2026-11-22-file-scanning.md` (1.4.0).
-- `dev/specs/2026-11-22-design-content-scanning-design.md`, `dev/plans/2026-11-22-design-content-scanning.md`.
-- `dev/fixture/design-*.php`, `dev/fixture/replace-slash.php`, `dev/TESTING.md`.
+- 1.3.3: `dev/specs/` and `dev/plans/` dated 2026-11-22 design-content, `dev/fixture/design-*.php`, `dev/TESTING.md`.
