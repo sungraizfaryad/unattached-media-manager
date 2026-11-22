@@ -3,34 +3,30 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 ## Where things stand
 
-**1.3.2 is live** (WP.org SVN r3816583, GitHub `main`, tag `1.3.2`, released 2026-11-22),
-300+ installs. Plugin Check showed nothing new against 1.3.1 (`dev/TESTING.md` has how to run it).
+**1.3.2 is live** (WP.org SVN r3816583, GitHub `main`, tag `1.3.2`, released 2026-11-22), 300+ installs.
+**1.3.3 is planned, not built**, on branch `feature/1.3.3-design-content` (spec + plan committed).
 
 ## Done
 
-- **1.3.2 trash search.** Unused view's filter bar now also on Trash (one shared
-  `UNMAM_Database::list_filter_clause()`). Restore All and Empty Trash hidden while filtered.
-  Auto-delete column (`_wp_trash_meta_time` + `EMPTY_TRASH_DAYS`). In Trash card links to Trash.
-  View switch drops filter params. Spec: `dev/specs/2026-11-22-trash-search-design.md`.
-- FLP test: Unused filters identical before/after across 11 combos; 30 throwaway trashed files
-  covered search, type, date, paging, per-page, empty result, overdue and no-meta dates; Restore
-  Selected via AJAX restored only the ticked two. FLP diffed clean against baseline after.
+- 1.3.2 trash search: shared `list_filter_clause()`, whole-trash buttons hidden while filtered,
+  Auto-delete column. Spec: `dev/specs/2026-11-22-trash-search-design.md`.
 - 1.3.0 terms scanning, 1.3.1 WooCommerce variation downloads (see changelog).
 
 ## Decisions
 
-- Whole-trash buttons hidden when filtered, not relabelled: same rule as Trash All on Unused.
-- Gal's "Beyond the media library" (orphan files on disk) is NOT the 1.4.0 filesystem scan, and
-  needs the quarantine work first. No front-end code still stands.
+- 1.3.3 before 1.4.0: Additional CSS, edited templates/parts and Site Editor styles were never
+  scanned (not public, no show_ui). On by default as tick boxes; deleted themes skipped; never
+  attached. Bundles two Replace Media fixes: backslash stripping, wp-image-12 hitting wp-image-123.
+- Gal's "Beyond the media library" (orphan files on disk) is NOT the 1.4.0 filesystem scan.
 
 ## Next
 
-1. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
-2. Forum replies (he drafts): Gemini23 x2 (trash deadline is urgent), Gal orphan files, kreativelabs nudge, Ade theme caveat.
-3. 1.4.0: theme/plugin file scanning per `dev/ROADMAP.md`.
+1. **Build 1.3.3** from `dev/plans/2026-11-22-design-content-scanning.md`. No code yet.
+2. Forum replies (he drafts): Gemini23 x2 (trash deadline urgent), Gal orphan files, kreativelabs, Ade.
+3. 1.4.0 file scanning after 1.3.3. REST enum worry is moot; reuse `extract_from_text( $text, true )`.
+4. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
 
 ## Key files
 
-- `includes/class-unmam-database.php` — `list_filter_clause()`, `get_trashed_attachments()`.
-- `includes/admin/class-unmam-admin.php` — Unused/Excluded/Trash rendering, `$view_url`.
-- `dev/SUPPORT.md`, `dev/ROADMAP.md`, `dev/TESTING.md`, `dev/specs/`.
+- `dev/specs/2026-11-22-design-content-scanning-design.md`, `dev/plans/2026-11-22-design-content-scanning.md`.
+- `dev/SUPPORT.md`, `dev/ROADMAP.md`, `dev/TESTING.md`.
