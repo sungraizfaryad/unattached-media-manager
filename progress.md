@@ -4,7 +4,7 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 ## Where things stand
 
 **1.3.3 is live** (WP.org SVN r3816797, GitHub `main`, tag `1.3.3`, released 2026-11-22), 300+ installs.
-**1.4.0 is built and tested on FLP** on `feature/1.4.0-file-scanning`. Not merged, not deployed, not tagged.
+**1.4.0 is built, tested on FLP and merged to local `main`.** Not pushed, not deployed, not tagged.
 
 ## Done
 
@@ -21,7 +21,7 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 ## Next
 
-1. Merge to `main`. Deploy only with Sungraiz's OK, per `~/Local Sites/plugins/DEPLOY.md`. Final review done, clean after one fix wave (6278b7b); FLP stopped.
+1. Merged to local `main` 2026-11-23 (fast-forward, not pushed, not tagged). Push, tag and deploy only with Sungraiz's OK, per `~/Local Sites/plugins/DEPLOY.md`.
 2. Forum replies (he drafts): Gemini23 x2 (trash deadline urgent, thread from 2026-11-10), Gal orphan files, kreativelabs, Ade.
 3. 1.4.1 list in `dev/ROADMAP.md`, plus: pass token for late batches, multisite `changed_at` as a site option, refused count in the upload.php bulk notice, drop the dead bulk trash/restore/delete handlers.
 4. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
