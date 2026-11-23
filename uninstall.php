@@ -50,6 +50,9 @@ $options = array(
     'unmam_db_version',
     'unmam_options_skipped_total',
     'unmam_job_state',
+    'unmam_file_scan_state',
+    'unmam_files_scanned_at',
+    'unmam_files_changed_at',
     // Legacy options (for users upgrading from old version)
     'aioms_settings',
     'mui_settings',
