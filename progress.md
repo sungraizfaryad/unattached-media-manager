@@ -21,9 +21,9 @@ _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum th
 
 ## Next
 
-1. Final whole-branch review and its fix wave. Stop FLP after that.
-2. Merge to `main`. Deploy only with Sungraiz's OK, per `~/Local Sites/plugins/DEPLOY.md`.
-3. Forum replies (he drafts): Gemini23 x2, Gal orphan files, kreativelabs, Ade.
+1. Merge to `main`. Deploy only with Sungraiz's OK, per `~/Local Sites/plugins/DEPLOY.md`. Final review done, clean after one fix wave (6278b7b); FLP stopped.
+2. Forum replies (he drafts): Gemini23 x2 (trash deadline urgent, thread from 2026-11-10), Gal orphan files, kreativelabs, Ade.
+3. 1.4.1 list in `dev/ROADMAP.md`, plus: pass token for late batches, multisite `changed_at` as a site option, refused count in the upload.php bulk notice, drop the dead bulk trash/restore/delete handlers.
 4. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
 
 Key files: the 1.4.0 spec and plan in `dev/`, `includes/class-unmam-file-*.php`, `dev/fixture/files-*.php`, `perms-check.php`.
