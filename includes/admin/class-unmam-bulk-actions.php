@@ -236,14 +236,20 @@ class UNMAM_Bulk_Actions {
             wp_send_json_error( 'Invalid parameters' );
         }
 
-        $can_edit_post = current_user_can( 'edit_post', $post_id );
-        $allowed       = array();
-        $errors        = array();
+        $post_error = '';
+        if ( ! get_post( $post_id ) ) {
+            $post_error = __( 'Invalid post ID.', 'unattached-media-manager' );
+        } elseif ( ! current_user_can( 'edit_post', $post_id ) ) {
+            $post_error = __( 'Permission denied', 'unattached-media-manager' );
+        }
+
+        $allowed = array();
+        $errors  = array();
 
         foreach ( $attachment_ids as $id ) {
             $error = $this->item_error( $id );
-            if ( '' === $error && ! $can_edit_post ) {
-                $error = __( 'Permission denied', 'unattached-media-manager' );
+            if ( '' === $error ) {
+                $error = $post_error;
             }
             if ( '' === $error ) {
                 $allowed[] = $id;

@@ -11,7 +11,7 @@
  */
 
 require_once ABSPATH . 'wp-admin/includes/user.php';
-foreach ( array( 'class-unmam-media-modal.php', 'class-unmam-bulk-actions.php' ) as $unmam_file ) {
+foreach ( array( 'class-unmam-admin.php', 'class-unmam-media-modal.php', 'class-unmam-bulk-actions.php' ) as $unmam_file ) {
 	require_once UNMAM_PLUGIN_DIR . 'includes/admin/' . $unmam_file;
 }
 
@@ -33,6 +33,7 @@ $seq  = 0;
 $admin_id = (int) get_users( array( 'role' => 'administrator', 'number' => 1, 'orderby' => 'ID', 'fields' => 'ID' ) )[0];
 $bulk     = UNMAM_Bulk_Actions::instance();
 $modal    = UNMAM_Media_Modal::instance();
+$admin    = UNMAM_Admin::instance();
 $denied   = 'Permission denied';
 
 // Runs a handler as a user and returns array( success, data ). wp_send_json_*() ends in
@@ -70,6 +71,9 @@ $bulk_call = function ( $user_id, $method, array $params ) use ( $call, $bulk ) 
 };
 $modal_call = function ( $user_id, $method, array $params ) use ( $call, $modal ) {
 	return $call( $user_id, $modal, $method, 'unmam_media_modal_nonce', $params );
+};
+$admin_call = function ( $user_id, $method, array $params ) use ( $call, $admin ) {
+	return $call( $user_id, $admin, $method, 'unmam_admin_nonce', $params );
 };
 
 $make_user = function ( $role ) use ( &$made ) {
@@ -127,6 +131,14 @@ $unused_of = function ( $id ) {
 $exists    = function ( $id ) {
 	clean_post_cache( $id );
 	return null !== get_post( $id ) && 'attachment' === get_post_type( $id );
+};
+$status_of = function ( $id ) {
+	clean_post_cache( $id );
+	return (string) get_post_field( 'post_status', $id, 'raw' );
+};
+$trash     = function ( $image_id ) use ( $admin_id ) {
+	wp_set_current_user( $admin_id );
+	wp_trash_post( $image_id );
 };
 $adopt     = function ( $image_id, $post_id ) {
 	wp_update_post( array( 'ID' => $image_id, 'post_parent' => $post_id ) );
@@ -394,6 +406,101 @@ try {
 		$ok( $s_ok && $safe_of( $s['b']['img1'] ), "modal mark safe as editor: B's image -> success" );
 		list( $s_ok, $data ) = $modal_call( $editor, 'ajax_unmark_safe', array( 'attachment_id' => $s['b']['img2'] ) );
 		$ok( $s_ok && ! $safe_of( $s['b']['img2'] ), "modal unmark safe as editor: B's image -> success" );
+	}
+	echo "-- bulk attach / modal attach, target post that does not exist\n";
+	{
+		$s       = $set();
+		$missing = 2147480000;
+		list( $s_ok, $data ) = $bulk_call( $a, 'ajax_bulk_attach', array(
+			'attachment_ids' => array( $s['a']['img1'] ),
+			'post_id'        => $missing,
+		) );
+		$ok( $s_ok && 1 === (int) $data['error_count'] && 'Invalid post ID.' === ( $data['errors'][ $s['a']['img1'] ] ?? '' ), 'bulk attach to a missing post: "Invalid post ID."' );
+		$ok( 0 === $parent_of( $s['a']['img1'] ), 'bulk attach to a missing post: image unchanged' );
+		list( $s_ok, $data ) = $modal_call( $a, 'ajax_attach_to_post', array( 'attachment_id' => $s['a']['img1'], 'post_id' => $missing ) );
+		$ok( ! $s_ok && 'Invalid post ID.' === $data, 'modal attach to a missing post: "Invalid post ID."' );
+		$ok( 0 === $parent_of( $s['a']['img1'] ), 'modal attach to a missing post: image unchanged' );
+	}
+
+	echo "-- trash, restore and delete (plugin page actions)\n";
+	{
+		$ok( UNMAM_Database::is_trash_available(), 'precondition: trash is available on this site' );
+
+		// Trash, single.
+		$s = $set();
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_trash_media', array( 'attachment_id' => $s['b']['img1'] ) );
+		$ok( ! $s_ok && $denied === $data, "trash as A: B's image -> Permission denied" );
+		$ok( $exists( $s['b']['img1'] ) && 'trash' !== $status_of( $s['b']['img1'] ), "trash as A: B's image unchanged" );
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_trash_media', array( 'attachment_id' => $s['a']['img1'] ) );
+		$ok( $s_ok && 'trash' === $status_of( $s['a']['img1'] ), 'trash as A: own image -> success, in the trash' );
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_trash_media', array( 'attachment_id' => $s['a']['post'] ) );
+		$ok( ! $s_ok && 'draft' === $status_of( $s['a']['post'] ), 'trash as A: a non-attachment -> error, post unchanged' );
+
+		$s = $set();
+		list( $s_ok, $data ) = $admin_call( $editor, 'ajax_trash_media', array( 'attachment_id' => $s['b']['img1'] ) );
+		$ok( $s_ok && 'trash' === $status_of( $s['b']['img1'] ), "trash as editor: B's image -> success" );
+
+		// Trash, bulk.
+		$s = $set();
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_trash_media_bulk', array( 'attachment_ids' => array( $s['a']['img1'], $s['b']['img1'] ) ) );
+		$ok( $s_ok && 1 === (int) $data['success'] && 1 === (int) $data['errors'] && $denied === ( $data['failed'][ $s['b']['img1'] ] ?? '' ) && 1 === count( $data['failed'] ), 'trash bulk as A [own, B]: one done, B reported' );
+		$ok( 'trash' === $status_of( $s['a']['img1'] ) && 'trash' !== $status_of( $s['b']['img1'] ), 'trash bulk as A: only own is in the trash' );
+		$s = $set();
+		list( $s_ok, $data ) = $admin_call( $editor, 'ajax_trash_media_bulk', array( 'attachment_ids' => array( $s['b']['img2'] ) ) );
+		$ok( $s_ok && 1 === (int) $data['success'] && 0 === (int) $data['errors'] && 'trash' === $status_of( $s['b']['img2'] ), "trash bulk as editor: B's image -> done" );
+
+		// Restore, single. Everything is trashed first, by the admin.
+		$s = $set();
+		foreach ( array( $s['a']['img1'], $s['b']['img1'], $s['b']['img2'] ) as $img ) {
+			$trash( $img );
+		}
+		$ok( 'trash' === $status_of( $s['a']['img1'] ) && 'trash' === $status_of( $s['b']['img1'] ), 'precondition: images are in the trash' );
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_restore_media', array( 'attachment_id' => $s['b']['img1'] ) );
+		$ok( ! $s_ok && $denied === $data && 'trash' === $status_of( $s['b']['img1'] ), "restore as A: B's image -> Permission denied, still in the trash" );
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_restore_media', array( 'attachment_id' => $s['a']['img1'] ) );
+		$ok( $s_ok && 'trash' !== $status_of( $s['a']['img1'] ), 'restore as A: own trashed image -> success, restored' );
+		$s = $set();
+		$trash( $s['b']['img1'] );
+		list( $s_ok, $data ) = $admin_call( $editor, 'ajax_restore_media', array( 'attachment_id' => $s['b']['img1'] ) );
+		$ok( $s_ok && 'trash' !== $status_of( $s['b']['img1'] ), "restore as editor: B's trashed image -> success" );
+
+		// Restore, bulk.
+		$s = $set();
+		foreach ( array( $s['a']['img1'], $s['b']['img1'], $s['b']['img2'] ) as $img ) {
+			$trash( $img );
+		}
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_restore_media_bulk', array( 'attachment_ids' => array( $s['a']['img1'], $s['b']['img1'] ) ) );
+		$ok( $s_ok && 1 === (int) $data['success'] && 1 === (int) $data['errors'] && $denied === ( $data['failed'][ $s['b']['img1'] ] ?? '' ), 'restore bulk as A [own, B]: one done, B reported' );
+		$ok( 'trash' !== $status_of( $s['a']['img1'] ) && 'trash' === $status_of( $s['b']['img1'] ), 'restore bulk as A: only own is restored' );
+		$s = $set();
+		$trash( $s['b']['img2'] );
+		list( $s_ok, $data ) = $admin_call( $editor, 'ajax_restore_media_bulk', array( 'attachment_ids' => array( $s['b']['img2'] ) ) );
+		$ok( $s_ok && 1 === (int) $data['success'] && 'trash' !== $status_of( $s['b']['img2'] ), "restore bulk as editor: B's image -> done" );
+
+		// Delete permanently, bulk. A trashed own image is deletable by its owner too.
+		$s = $set();
+		$trash( $s['a']['img2'] );
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_delete_media_permanently', array( 'attachment_ids' => array( $s['a']['img1'], $s['a']['img2'], $s['b']['img1'] ) ) );
+		$ok( $s_ok && 2 === (int) $data['success'] && 1 === (int) $data['errors'] && $denied === ( $data['failed'][ $s['b']['img1'] ] ?? '' ), 'delete bulk as A [own, own trashed, B]: two done, B reported' );
+		$ok( ! $exists( $s['a']['img1'] ) && ! $exists( $s['a']['img2'] ) && $exists( $s['b']['img1'] ), 'delete bulk as A: own images gone, B\'s still there' );
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_delete_media_permanently', array( 'attachment_ids' => array( $s['a']['post'] ) ) );
+		$ok( $s_ok && 0 === (int) $data['success'] && 1 === (int) $data['errors'] && null !== get_post( $s['a']['post'] ), 'delete bulk as A on a non-attachment: reported, post still there' );
+
+		$s = $set();
+		list( $s_ok, $data ) = $admin_call( $editor, 'ajax_delete_media_permanently', array( 'attachment_ids' => array( $s['b']['img1'] ) ) );
+		$ok( $s_ok && 1 === (int) $data['success'] && ! $exists( $s['b']['img1'] ), "delete bulk as editor: B's image -> deleted" );
+
+		// Delete permanently, single.
+		$s = $set();
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_delete_single', array( 'attachment_id' => $s['b']['img1'] ) );
+		$ok( ! $s_ok && $denied === $data && $exists( $s['b']['img1'] ), "delete single as A: B's image -> Permission denied, still there" );
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_delete_single', array( 'attachment_id' => $s['a']['img1'] ) );
+		$ok( $s_ok && ! $exists( $s['a']['img1'] ), 'delete single as A: own image -> success, gone' );
+		list( $s_ok, $data ) = $admin_call( $a, 'ajax_delete_single', array( 'attachment_id' => $s['a']['post'] ) );
+		$ok( ! $s_ok && null !== get_post( $s['a']['post'] ), 'delete single as A on a non-attachment: error, post still there' );
+		$s = $set();
+		list( $s_ok, $data ) = $admin_call( $editor, 'ajax_delete_single', array( 'attachment_id' => $s['b']['img1'] ) );
+		$ok( $s_ok && ! $exists( $s['b']['img1'] ), "delete single as editor: B's image -> success, gone" );
 	}
 } catch ( Throwable $e ) {
 	$fail++;

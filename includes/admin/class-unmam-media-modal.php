@@ -304,6 +304,9 @@ class UNMAM_Media_Modal {
         }
 
         $this->require_attachment_access( $attachment_id );
+        if ( ! get_post( $post_id ) ) {
+            wp_send_json_error( __( 'Invalid post ID.', 'unattached-media-manager' ) );
+        }
         if ( ! current_user_can( 'edit_post', $post_id ) ) {
             wp_send_json_error( __( 'Permission denied', 'unattached-media-manager' ) );
         }

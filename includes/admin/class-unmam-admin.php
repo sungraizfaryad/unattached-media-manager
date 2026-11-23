@@ -2364,6 +2364,42 @@ class UNMAM_Admin {
     }
 
     /**
+     * Why the current user may not delete this attachment, or '' when they may.
+     *
+     * @param int $attachment_id Attachment ID.
+     * @return string
+     */
+    private function delete_error( $attachment_id ) {
+        if ( 'attachment' !== get_post_type( $attachment_id ) ) {
+            return __( 'Invalid attachment ID.', 'unattached-media-manager' );
+        }
+        if ( ! current_user_can( 'delete_post', $attachment_id ) ) {
+            return __( 'Permission denied', 'unattached-media-manager' );
+        }
+        return '';
+    }
+
+    /**
+     * Keep the attachments the current user may delete.
+     *
+     * @param int[] $attachment_ids Attachment IDs.
+     * @param array $refused        Filled with id => message for the ones left out.
+     * @return int[]
+     */
+    private function deletable_attachments( array $attachment_ids, array &$refused ) {
+        $allowed = array();
+        foreach ( $attachment_ids as $id ) {
+            $error = $this->delete_error( $id );
+            if ( '' === $error ) {
+                $allowed[] = $id;
+            } else {
+                $refused[ $id ] = $error;
+            }
+        }
+        return $allowed;
+    }
+
+    /**
      * AJAX: Trash single media
      */
     public function ajax_trash_media() {
@@ -2377,6 +2413,11 @@ class UNMAM_Admin {
 
         if ( ! $attachment_id ) {
             wp_send_json_error( __( 'Invalid attachment ID.', 'unattached-media-manager' ) );
+        }
+
+        $error = $this->delete_error( $attachment_id );
+        if ( '' !== $error ) {
+            wp_send_json_error( $error );
         }
 
         $result = UNMAM_Database::trash_attachment( $attachment_id );
@@ -2409,11 +2450,17 @@ class UNMAM_Admin {
             wp_send_json_error( __( 'No items selected.', 'unattached-media-manager' ) );
         }
 
-        $result = UNMAM_Database::trash_attachments( $attachment_ids );
+        $refused = array();
+        $allowed = $this->deletable_attachments( $attachment_ids, $refused );
+        $result  = UNMAM_Database::trash_attachments( $allowed );
+
+        $result['errors'] += count( $refused );
+        $failed            = $refused + array_filter( $result['details'], 'is_string' );
 
         wp_send_json_success( array(
             'success'      => $result['success'],
             'errors'       => $result['errors'],
+            'failed'       => $failed,
             'message'      => sprintf(
                 /* translators: 1: success count, 2: error count */
                 __( 'Moved %1$d items to trash. %2$d errors.', 'unattached-media-manager' ),
@@ -2440,6 +2487,11 @@ class UNMAM_Admin {
 
         if ( ! $attachment_id ) {
             wp_send_json_error( __( 'Invalid attachment ID.', 'unattached-media-manager' ) );
+        }
+
+        $error = $this->delete_error( $attachment_id );
+        if ( '' !== $error ) {
+            wp_send_json_error( $error );
         }
 
         $result = UNMAM_Database::restore_attachment( $attachment_id );
@@ -2472,11 +2524,17 @@ class UNMAM_Admin {
             wp_send_json_error( __( 'No items selected.', 'unattached-media-manager' ) );
         }
 
-        $result = UNMAM_Database::restore_attachments( $attachment_ids );
+        $refused = array();
+        $allowed = $this->deletable_attachments( $attachment_ids, $refused );
+        $result  = UNMAM_Database::restore_attachments( $allowed );
+
+        $result['errors'] += count( $refused );
+        $failed            = $refused + array_filter( $result['details'], 'is_string' );
 
         wp_send_json_success( array(
             'success'      => $result['success'],
             'errors'       => $result['errors'],
+            'failed'       => $failed,
             'message'      => sprintf(
                 /* translators: 1: success count, 2: error count */
                 __( 'Restored %1$d items. %2$d errors.', 'unattached-media-manager' ),
@@ -2505,11 +2563,17 @@ class UNMAM_Admin {
             wp_send_json_error( __( 'No items selected.', 'unattached-media-manager' ) );
         }
 
-        $result = UNMAM_Database::delete_attachments_permanently( $attachment_ids );
+        $refused = array();
+        $allowed = $this->deletable_attachments( $attachment_ids, $refused );
+        $result  = UNMAM_Database::delete_attachments_permanently( $allowed );
+
+        $result['errors'] += count( $refused );
+        $failed            = $refused + array_filter( $result['details'], 'is_string' );
 
         wp_send_json_success( array(
             'success'      => $result['success'],
             'errors'       => $result['errors'],
+            'failed'       => $failed,
             'message'      => sprintf(
                 /* translators: 1: success count, 2: error count */
                 __( 'Deleted %1$d items permanently. %2$d errors.', 'unattached-media-manager' ),
@@ -2536,6 +2600,11 @@ class UNMAM_Admin {
 
         if ( ! $attachment_id ) {
             wp_send_json_error( __( 'Invalid attachment ID.', 'unattached-media-manager' ) );
+        }
+
+        $error = $this->delete_error( $attachment_id );
+        if ( '' !== $error ) {
+            wp_send_json_error( $error );
         }
 
         $result = UNMAM_Database::delete_attachment_permanently( $attachment_id );
