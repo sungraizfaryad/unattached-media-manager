@@ -360,8 +360,8 @@ Your parser should implement the `UNMAM_Parser_Interface`.
 * **Images used only in theme or plugin files are now found:** stylesheets, block theme template files, theme settings files, and image addresses or IDs written straight into theme code. They used to be listed as unused.
 * **Images a theme builds in code, which most themes do, still can't be seen.** Check anything that looks like a theme image before deleting it.
 * Every installed theme and plugin is read, active or not. Where Used names the file and says when the theme or plugin is inactive. Only users who can manage plugins see the names; everyone else sees "Theme or plugin file".
-* A notice appears when a theme or plugin changed since the last scan, and when some files could not be read. Turn the scan off with "Theme and plugin files" on the Settings tab.
-* Images are never attached to these, since a theme file is not a page.
+* A notice appears when a theme or plugin is installed, updated or deleted since the last scan, and when some files could not be read. Edits made over FTP or in the file editor are not noticed. Turn the scan off with "Theme and plugin files" on the Settings tab.
+* Images are never attached to theme or plugin files, since a theme file is not a page.
 * **Replace Media no longer marks an image as unused in places it couldn't change.**
 * The Where Used lookup in the media screens now checks the user's permissions.
 * **Security: Replace Media is now limited to administrators, and the other media actions check that the user can edit or delete each image.**
