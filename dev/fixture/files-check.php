@@ -322,12 +322,16 @@ if ( 'display' === $mode ) {
 		$dry = UNMAM_Attachment_Manager::instance()->replace_references( $sidebar, $spare, true );
 		$ok( ! empty( $dry['errors'] ) && false !== strpos( $dry['errors'][0]['error'], 'edit this file by hand: Unmam Fixture Theme (inactive): parts/sidebar.html' ), 'replace lists the file' );
 		$ok( ! $dry['replaced'] && 0 === $dry['total_count'], 'replace: a file row is not counted as replaced' );
+		$ok( isset( $dry['errors'][0]['context_key'] ) && 'theme:unmam-fixture-theme|parts/sidebar.html' === $dry['errors'][0]['context_key'], 'replace as admin: the error keeps its context_key' );
 		$real = UNMAM_Attachment_Manager::instance()->replace_references( $sidebar, $spare, false );
 		$ok( 0 === $real['total_count'] && $sidebar_md5 === md5_file( $fx['theme'] . '/parts/sidebar.html' ), 'replace, for real: the theme file is untouched' );
 		$ok( $file_rows_for( $sidebar ) > 0 && 0 === $file_rows_for( $spare ), 'replace, for real: the file row stays on the old image' );
 		wp_set_current_user( $author_id );
 		$dry = UNMAM_Attachment_Manager::instance()->replace_references( $sidebar, $spare, true );
 		$ok( ! empty( $dry['errors'] ) && 'Not changed, edit this file by hand: Theme or plugin file' === $dry['errors'][0]['error'], 'replace as author: generic title in the message' );
+		$ok( ! isset( $dry['errors'][0]['context_key'] ), 'replace as author: the error has no context_key' );
+		$whole = (string) wp_json_encode( $dry );
+		$ok( false === strpos( $whole, 'sidebar.html' ) && false === stripos( $whole, 'fixture' ) && false === strpos( $whole, 'unmam-fixture' ), 'replace as author: nothing in the response names the file, theme or plugin' );
 	} finally {
 		wp_set_current_user( 0 );
 
@@ -459,6 +463,7 @@ if ( 'notices' === $mode ) {
 			$ok( $notice_state()['changed'], "changed after a $what" );
 		}
 
+		sleep( 1 ); // The pass has to start after the last change above.
 		$ok( $run_full_pass(), 'a second files pass finished' );
 		$ok( ! $notice_state()['changed'], 'cleared by the next pass' );
 		$ok( ! empty( $notice_state()['skipped']['items'] ), 'skipped list exposed' );
@@ -475,6 +480,48 @@ if ( 'notices' === $mode ) {
 		$html = $html_for();
 		$ok( false !== strpos( $html, 'could not be read' ) && false === strpos( $html, 'huge.css' ) && false === strpos( $html, 'Unmam Fixture' ) && false !== strpos( $html, 'Theme or plugin file: over 10 MB' ), 'not read, as a non-admin: generic title, no path' );
 		wp_set_current_user( $admin_id );
+
+		// A theme or plugin that changes while a pass is running, after it has read something,
+		// is not covered by that pass. The pass is dated from its start, so the change shows.
+		$first_batch = function () use ( $scanner, &$override ) {
+			$override = array( 'files' => 1, 'seconds' => 0 );
+			UNMAM_Database::reset_scan_progress( 'files' );
+			delete_option( UNMAM_File_Scanner::STATE_OPTION );
+			$status   = $scanner->run_batch( 'files' )['status'];
+			$override = array();
+			return $status;
+		};
+		$finish_pass = function () use ( $scanner ) {
+			for ( $n = 0; $n < 5000; $n++ ) {
+				if ( 'completed' === $scanner->run_batch( 'files' )['status'] ) {
+					return true;
+				}
+			}
+			return false;
+		};
+
+		sleep( 1 );
+		$ok( 'running' === $first_batch(), 'mid-pass change: the first batch leaves the pass running' );
+		$started = (int) $state_of()['pass_started'];
+		$ok( $started > 0 && $started <= time(), 'mid-pass change: the state holds the start time' );
+		sleep( 1 );
+		UNMAM_File_Scanner::mark_changed();
+		$ok( $finish_pass(), 'mid-pass change: the pass finished' );
+		$ok( (int) get_option( 'unmam_files_scanned_at' ) === $started, 'mid-pass change: the pass is dated from its start' );
+		$ok( (int) get_option( 'unmam_files_changed_at' ) > $started, 'mid-pass change: the change came after that start' );
+		$ok( $notice_state()['changed'], 'mid-pass change: still reported as changed after the pass' );
+		$ok( false !== strpos( $html_for(), 'Themes or plugins changed since the last scan.' ), 'mid-pass change: the admin notice shows' );
+
+		// A state saved before the start time existed falls back to the time the pass ended.
+		sleep( 1 );
+		$ok( 'running' === $first_batch(), 'old state: the first batch leaves the pass running' );
+		$state = $state_of();
+		unset( $state['pass_started'] );
+		update_option( UNMAM_File_Scanner::STATE_OPTION, $state, false );
+		$before_end = time();
+		$ok( $finish_pass(), 'old state: the pass finished' );
+		$ok( (int) get_option( 'unmam_files_scanned_at' ) >= $before_end, 'old state: dated from the end of the pass' );
+		$ok( ! $notice_state()['changed'], 'old state: a later pass clears the change' );
 
 		// A crafted state: every reason, a component skipped as a whole, more than ten, then one.
 		$state                  = $state_of();

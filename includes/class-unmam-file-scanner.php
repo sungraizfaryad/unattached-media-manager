@@ -420,9 +420,11 @@ class UNMAM_File_Scanner {
         }
 
         $scanned = (int) get_option( 'unmam_files_scanned_at', 0 );
+        $changed = (int) get_option( 'unmam_files_changed_at', 0 );
 
+        // A change in the same second a pass began counts: that pass may have read the file first.
         $state['never_scanned'] = 0 === $scanned;
-        $state['changed']       = (int) get_option( 'unmam_files_changed_at', 0 ) > $scanned;
+        $state['changed']       = $changed > 0 && $changed >= $scanned;
         $state['skipped']       = self::skipped();
 
         return $state;
@@ -645,7 +647,10 @@ class UNMAM_File_Scanner {
             'status'          => 'completed',
             'completed_at'    => current_time( 'mysql' ),
         ) );
-        update_option( 'unmam_files_scanned_at', time(), false );
+        // Dated from the start of the pass, so a theme or plugin that changed while it ran still
+        // reads as changed.
+        $started = (int) $state['pass_started'];
+        update_option( 'unmam_files_scanned_at', $started > 0 ? $started : time(), false );
 
         return self::result(
             $budget['files'],
@@ -672,7 +677,8 @@ class UNMAM_File_Scanner {
         $components = self::components();
         $state      = self::blank_state();
 
-        $state['components'] = $components;
+        $state['components']   = $components;
+        $state['pass_started'] = time();
         self::save_state( $state );
 
         UNMAM_Database::update_scan_progress( 'files', array(
@@ -689,6 +695,7 @@ class UNMAM_File_Scanner {
     private static function blank_state(): array {
         return array(
             'components'    => array(),
+            'pass_started'  => 0,  // Unix time the pass began; 0 on a state saved before this existed.
             'index'         => 0,  // Current component.
             'path'          => '', // File in progress when candidate > 0, else the last finished file.
             'candidate'     => 0,  // Next candidate in that file.

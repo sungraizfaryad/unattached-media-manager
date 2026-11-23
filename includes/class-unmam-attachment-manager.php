@@ -303,6 +303,7 @@ class UNMAM_Attachment_Manager {
                     __( 'Not changed, edit this file by hand: %s', 'unattached-media-manager' ),
                     UNMAM_File_Scanner::describe( (string) $ref['context_key'] )['title']
                 );
+                $result = UNMAM_File_Scanner::without_details( $result );
                 break;
 
             default:
