@@ -4,7 +4,7 @@ Tags: media library, unused media, media cleaner, cleanup, attachments
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.3
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -108,6 +108,7 @@ WordPress marks media as "Unattached" if it wasn't uploaded directly to a post. 
 * **Widgets** - Image widgets, text widgets with media, custom HTML
 * **Theme Options** - Customizer settings, theme mods, custom logos
 * **Options Table** - Plugin settings that store media IDs or URLs
+* **Theme & Plugin Files** - Stylesheets, block theme templates, theme settings files and image addresses written out in theme or plugin code (read only, never changed)
 * **Video & Audio** - HTML5 video/audio elements, poster images, source tags
 * **Responsive Images** - srcset attributes and lazy-loading data attributes
 
@@ -191,8 +192,8 @@ The **Change History** tab shows:
 = Before Deleting Any Media =
 
 1. **Always run a full scan first** - Make sure the index is up to date
-2. **Review files manually** - The scanner detects database references, but images might be:
-   - Hardcoded in theme PHP files
+2. **Review files manually** - The scanner reads your database and your theme and plugin files, but images might be:
+   - Built in theme or plugin code, for example an address put together as the page loads
    - Used by external websites linking to your images
    - Referenced in custom code or third-party plugins not yet supported
    - Used in email templates stored outside WordPress
@@ -230,10 +231,10 @@ Files marked as "Potentially Unused" means:
 * No references were found in the scanned content
 * **This doesn't guarantee the file is unused**
 * The file might be used in ways not detected:
-  - Theme template files (hardcoded)
+  - Theme or plugin code that builds the image address as it runs (most themes do)
+  - Theme or plugin files the scan could not read, or that are over 10 MB (the plugin lists them)
   - External sites linking to your images
   - Custom plugins with non-standard storage
-  - CSS background images defined in stylesheets
   - JavaScript-loaded images
 
 = Recommended Workflow =
@@ -286,12 +287,12 @@ Yes. There's a dedicated ACF parser that understands image fields, gallery field
 
 = Will it detect images added via code/theme? =
 
-If images are stored in the database (post meta, options, theme mods), they will be detected. Images hardcoded in PHP theme files are not detected as they're not stored in the database.
+Partly. Images stored in the database (post meta, options, theme mods) are detected. Since 1.4.0 the plugin also reads theme and plugin files, so an image whose address or ID is written out in a stylesheet, a block theme template or theme code is found too. Images a theme builds in code, for example by putting a folder path and a file name together as the page loads, are not found, and most themes do this. Check anything that looks like a theme image before deleting it.
 
 = Is it safe to delete media marked as "unused"? =
 
-**Always review before deleting!** The scanner indexes database references, but images might be:
-- Hardcoded in theme files
+**Always review before deleting!** The scanner reads database references and theme and plugin files, but images might be:
+- Built in theme or plugin code
 - Used by external services
 - Linked from other websites
 - Used in custom code
@@ -352,6 +353,18 @@ Your parser should implement the `UNMAM_Parser_Interface`.
 8. **Attachment Settings** - Choose which content areas (Post Content, Featured Images, ACF Fields, Widgets, Theme Options) are actively scanned.
 
 == Changelog ==
+
+= 1.4.0 =
+**Finds images used in theme and plugin files.**
+
+* **Images used only in theme or plugin files are now found:** stylesheets, block theme template files, theme settings files, and image addresses or IDs written straight into theme code. They used to be listed as unused.
+* **Images a theme builds in code, which most themes do, still can't be seen.** Check anything that looks like a theme image before deleting it.
+* Every installed theme and plugin is read, active or not. Where Used names the file and says when the theme or plugin is inactive. Only users who can manage plugins see the names; everyone else sees "Theme or plugin file".
+* A notice appears when a theme or plugin changed since the last scan, and when some files could not be read. Turn the scan off with "Theme and plugin files" on the Settings tab.
+* Images are never attached to these, since a theme file is not a page.
+* **Replace Media no longer marks an image as unused in places it couldn't change.**
+* The Where Used lookup in the media screens now checks the user's permissions.
+* **Security: Replace Media is now limited to administrators, and the other media actions check that the user can edit or delete each image.**
 
 = 1.3.3 =
 **Finds images used in your theme's design settings.**
@@ -491,6 +504,9 @@ This release is mostly about the accuracy of the Unused list, in both directions
   * Sticky status bar for background operations
 
 == Upgrade Notice ==
+
+= 1.4.0 =
+Run a full scan after updating.
 
 = 1.3.3 =
 Images used only in Additional CSS or the Site Editor could be listed as unused. Run a full scan after updating. Also fixes two Replace Media bugs: it removed backslashes from content, and replacing one image could change the tag of another whose number started the same way.

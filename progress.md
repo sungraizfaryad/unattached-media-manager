@@ -1,30 +1,29 @@
-_Last updated: 2026-11-22._
+_Last updated: 2026-11-23._
 _Mines and architecture in CLAUDE.md. Next release in `dev/ROADMAP.md`. Forum threads in `dev/SUPPORT.md`._
 
 ## Where things stand
 
 **1.3.3 is live** (WP.org SVN r3816797, GitHub `main`, tag `1.3.3`, released 2026-11-22), 300+ installs.
+**1.4.0 is built and tested on FLP** on `feature/1.4.0-file-scanning`. Not merged, not deployed, not tagged.
 
 ## Done
 
-- 1.3.3: Additional CSS, edited templates/parts and Site Editor styles scanned; Replace Media keeps
-  backslashes, unserializes without classes, no longer hits `wp-image-123` when replacing 12.
-- 1.3.2 trash search, 1.3.0 terms scanning, 1.3.1 WooCommerce variation downloads (see changelog).
+- 1.4.0: theme and plugin files scanned (stylesheets, block theme templates, settings files, literal URLs and IDs in code), `scan_files` setting on by default, two notices, Where Used for file rows.
+- 1.4.0: Replace Media re-indexes changed sources instead of moving every row; file rows are reported, never written.
+- 1.4.0: per-item permission checks on every media AJAX action and the usage lookup; Replace Media is `manage_options` only.
+- FLP: files step 4.6 s in 37 batches over 7,356 entries; 88 images left the unused list, 0 entered; Plugin Check shows nothing new.
 
 ## Decisions
 
-- Gal's "Beyond the media library" (orphan files on disk) is NOT the 1.4.0 filesystem scan.
-- 1.4.0 also fixes Replace Media moving rows it could not change, and the usage AJAX capability gap.
+- Sungraiz's: helper agents for the build, one final whole-branch reviewer, permission fix inside 1.4.0 with Replace Media admin only.
+- Files step rewinds in `full_scan()`, never on `completed`. Options and terms still have that race: ROADMAP.
+- Gal's "Beyond the media library" (orphan files on disk) is NOT file scanning.
 
 ## Next
 
-1. Forum replies (he drafts): Gemini23 x2 (trash deadline urgent), Gal orphan files, kreativelabs, Ade.
-   Gal's sidebar is fixed by 1.3.3 only if he edited it in the Site Editor; on disk it needs 1.4.0.
-2. 1.4.0 file scanning: spec and plan approved 2026-11-22 on `feature/1.4.0-file-scanning`, not built.
-   Build with subagent-driven execution in a fresh chat (handoff note has the paste line).
-3. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
+1. Final whole-branch review and its fix wave. Stop FLP after that.
+2. Merge to `main`. Deploy only with Sungraiz's OK, per `~/Local Sites/plugins/DEPLOY.md`.
+3. Forum replies (he drafts): Gemini23 x2, Gal orphan files, kreativelabs, Ade.
+4. `CHANGELOG.md` ships but stops at 1.1.1; readme.txt is the real changelog. Backfill or drop it.
 
-## Key files
-
-- `dev/specs/2026-11-22-file-scanning-design.md`, `dev/plans/2026-11-22-file-scanning.md` (1.4.0).
-- 1.3.3: `dev/specs/` and `dev/plans/` dated 2026-11-22 design-content, `dev/fixture/design-*.php`, `dev/TESTING.md`.
+Key files: the 1.4.0 spec and plan in `dev/`, `includes/class-unmam-file-*.php`, `dev/fixture/files-*.php`, `perms-check.php`.

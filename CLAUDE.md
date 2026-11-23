@@ -7,7 +7,7 @@
 - **PHP class prefix:** `UNMAM_` (constants `UNMAM_*`). Older identifiers `mui_*` / `mui-*` and `aioms_*` still exist on purpose — see mines.
 - **GitHub:** https://github.com/sungraizfaryad/unattached-media-manager
 - **WP.org:** https://wordpress.org/plugins/unattached-media-manager/
-- **Current release:** 1.3.0 (shipped 2026-09-07, SVN r3684996). 1.3.1 (WooCommerce variation downloads) is on `fix/1.3.1-woo-variation-downloads`, tested, not yet deployed.
+- **Current release:** 1.3.3 (shipped 2026-11-22, SVN r3816797). 1.4.0 (theme and plugin file scanning) is on `feature/1.4.0-file-scanning`: built and tested on FLP, not merged, not deployed.
 
 WordPress only marks media as "attached" when it was uploaded through the post editor. Anything added via ACF, Gutenberg blocks, page builders, widgets, theme options, shortcodes, SEO plugins, WooCommerce, or custom tables shows as "Unattached", which makes the native Unattached filter unreliable. This plugin scans the whole site for where media is actually used, attaches used files to their parent posts so the native filter works again, and surfaces genuinely unused media for safe cleanup (trash, restore, delete, with full history and revert).
 
@@ -73,7 +73,19 @@ rsync -a --delete \
 - A design post whose theme is not installed is skipped after its rows are cleared. An unknown theme counts as installed.
 - Edit links only for the active theme: core builds template edit links from `get_stylesheet()`.
 - `UNMAM_Design_Parser` only reads `custom_css` and `wp_global_styles`. Templates and parts go through the content and block parsers.
-- `extract_from_text( $text, true )` also matches root- and protocol-relative upload URLs. Only the design parser passes `true`; 1.4.0's file scan should too.
+- `extract_from_text( $text, true )` also matches root- and protocol-relative upload URLs. The design parser passes `true`; the file scan asks for the same through `find_candidates()` options.
+
+**Files (1.4.0)**
+
+- File rows are `source_type` `file`, `source_id` 0, `context_type` `theme_file`, `plugin_file` or `mu_plugin_file`. `context_key` is the component key and the relative path joined by `|` (`theme:genesis-block-theme|style.css`), because a stylesheet slug can contain `/`. Never attached: the attach queries need `source_type = 'post'` and the files step never calls `auto_attach_media()`.
+- `context_key` and `reference_value` come from disk bytes, and `wpdb::insert()` refuses invalid UTF-8 or an over-long key. `UNMAM_File_Scanner::write_reference()` is the only place a file row is written: it cleans both values, shortens the key from the middle, and retries once under a hashed key so the image is still credited.
+- **The `files` step rewinds in `UNMAM_Scanner::full_scan()` and never on `completed`.** This is the one exception to "a resumable step must rewind when re-entered". The browser batch endpoint takes no lock while the minute cron keeps running, so a late duplicate batch can arrive after the last one wrote `completed`. Rewinding there wipes every file row, reads one batch and leaves the scan marked complete. `full_scan()` always resets the row, so a rescan without `--reset` still re-reads every file.
+- **The walker compares with `strcmp()` and `===` only.** PHP compares two numeric strings as numbers, so `'9' < '10'` is true while `strcmp()` puts `10` first, and a loose comparison skips folder `9` whole. Names are cast to `(string)` and never used as array keys, where numeric names turn into ints. Relative paths are built by joining `scandir()` names with `/`, never from `realpath()`, which gives backslashes on Windows. `walk()` returns `last`, the final entry it consumed, and a walk that stopped on the entry budget resumes after it.
+- Pass state is one option, `unmam_file_scan_state`, with the component list stored in it so a plugin installed mid-pass cannot shift positions. A cursor file that stops three batches in a row is skipped and reported. The three file options are in `uninstall.php`; a new option name goes there too.
+- **Replace Media re-indexes instead of moving rows.** There is no blanket `UPDATE ... SET attachment_id`. After a real run it calls `index_post()` per changed post, `index_term()` per term and `index_options()` once, so rows from sources it could not change, files included, stay on the old image. File rows are never written: `replace_single_reference()` returns "Not changed, edit this file by hand: {component}: {path}".
+- **Permission checks live in the AJAX handlers, per item, never in `UNMAM_Attachment_Manager`.** WP-CLI runs as user 0 and the manager has to keep working there. Every handler on upload.php and in the media modal checks `edit_post` (or `delete_post`) on each attachment, and `edit_post` on the target post for attach. Items that fail are skipped and reported. Replace Media needs `manage_options`, the same as its REST route. The plugin page's trash, restore and delete handlers keep `delete_posts` and add a per-item `delete_post`.
+- **`UNMAM_File_Scanner::can_see_details()`** is `activate_plugins`, or WP-CLI as user 0. Only those users get theme and plugin names and paths in Where Used, the usage AJAX response and Replace Media errors. Everyone else gets "Theme or plugin file". `ajax_get_usage()` itself needs `upload_files` plus `edit_post` on the attachment.
+- No edit or view link for a file row. Many hosts disable the file editor, and a link into live code invites a broken site.
 
 **Replace Media**
 
@@ -83,7 +95,7 @@ rsync -a --delete \
 
 **Reference extraction**
 
-- **`UNMAM_Reference_Extractor` is the only copy of the "find media in a text blob" regex.** The custom-table parser, the meta parser's last-resort branch and the ACF text-field bucket all call it, and 1.4.0's filesystem scan should too. Do not write a fourth copy.
+- **`UNMAM_Reference_Extractor` is the only copy of the "find media in a text blob" regex.** The custom-table parser, the meta parser's last-resort branch and the ACF text-field bucket all call it, and so does the file scan, through `find_candidates()`. Do not write a fourth copy.
 - **`UNMAM_Meta_Parser::looks_like_media_url()` returns true for any string merely containing `/wp-content/uploads/`**, including a whole blob of markup, which `url_to_attachment_id()` cannot resolve. So the URL branch only returns early when it actually produced a reference; otherwise it falls through to the extractor. Restoring the unconditional return makes every WYSIWYG value held in meta silently unscannable. This was caught in review, not in testing.
 - **`url_to_attachment_id()` takes a second argument, `$allow_filename_fallback`.** Its last-resort filename match has no host check, so a URL on someone else's site that shares a basename with one of ours credits the wrong file. The ACF `url` / `link` / `oembed` / `icon_picker` fields pass `UNMAM_Database::url_points_at_this_site()` because they hold whatever URL an editor typed. Every other caller keeps the default `true`, which is the pre-1.3.0 behaviour. `url_points_at_this_site()` deliberately fails open: same host, no host, or an uploads path anywhere in the URL all count as ours, so CDNs and changed domains still resolve.
 - **That fix is partial, and knowingly so.** ACF stores a `link` field as a serialized array with a `url` key, and `UNMAM_Meta_Parser::parse_complex_value()` matches `url` keys with the fallback still enabled, so the same external URL is credited again through the `term_meta` / `postmeta` row. Closing that means gating the shared resolver for all post meta on every install, which is the under-reporting direction and needs its own release. `dev/fixture/acf-seed.php` asserts the ACF path is 0 and prints the meta path as a known bypass.
@@ -122,7 +134,9 @@ Core (`includes/`):
 - `class-unmam-attachment-manager.php` — attach/detach, reference replacement, delete guards.
 - `class-unmam-history.php` — change log with one-click revert.
 - `class-unmam-resource-monitor.php` — adaptive batch sizing.
-- `class-unmam-reference-extractor.php` — the single copy of media-in-text extraction (`wp-image-{ID}` classes and upload URLs) plus the `looks_extractable()` pre-filter.
+- `class-unmam-reference-extractor.php` — the single copy of media-in-text extraction (`wp-image-{ID}` classes and upload URLs) plus the `looks_extractable()` pre-filter. `find_candidates()` finds, `extract_from_text()` finds then resolves.
+- `class-unmam-file-walker.php`: the 1.4.0 directory walk: `scandir()` per folder, `strcmp()` order, symlink and depth guards, a resumable cursor, and the list of files it could not read.
+- `class-unmam-file-scanner.php`: the `files` scan step: component list (themes, plugin folders and files, mu-plugins), piece reader, rows, skipped list, the two notices, `describe()` for Where Used, `can_see_details()`.
 
 Admin (`includes/admin/`): `class-unmam-admin.php` (5 tabs plus the settings save handler and the unscanned-post-types notice), `class-unmam-bulk-actions.php`, `class-unmam-media-modal.php`.
 

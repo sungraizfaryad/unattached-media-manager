@@ -72,14 +72,65 @@ rm ~/Local\ Sites/flp/app/public/wp-content/mu-plugins/unmam-test-harness.php
 As of 1.2.0, `check.php` shows 3 of 7 detected. The 4 undetected are the 3 term cases and the
 theme CSS case.
 
-**As of 1.3.0 it should show 6 of 7.** `termmeta`, `termwysiwyg` and `termthumb` must all pass
-with ACF absent, because the generic meta parser reads raw term meta and its last-resort
-branch reads the WYSIWYG markup. Only `themecss` stays undetected until 1.4.0. If a case that
-used to pass starts failing, that is a regression.
+As of 1.3.0 it showed 6 of 7. `termmeta`, `termwysiwyg` and `termthumb` must all pass with ACF
+absent, because the generic meta parser reads raw term meta and its last-resort branch reads
+the WYSIWYG markup.
+
+**As of 1.4.0 it should show 7 of 7.** The file scan reads the fixture's theme CSS, so
+`themecss` is found now. If a case that passed under 1.3.3 starts failing, that is a regression.
 
 The fixture taxonomy `unmam_tax` is registered by the harness mu-plugin *after* settings were
 first stored, so it also exercises the taxonomy reconciliation: it must be scanned without
 anyone opening the Settings page.
+
+## File scanning fixture (1.4.0)
+
+Every script prints `ok <name>` / `FAIL <name>` lines and ends with `failures: N`. The
+release gate is `failures: 0` from each one, in this order:
+
+```bash
+dev/flpwp.sh eval-file dev/fixture/files-unit.php            # extractor, walker, piece reader
+dev/flpwp.sh eval-file dev/fixture/files-seed.php            # theme, plugin and mu-plugin files plus images
+dev/flpwp.sh eval-file dev/fixture/files-check.php           # default: full pass, cursor cases
+dev/flpwp.sh eval-file dev/fixture/files-check.php tiny      # 3 files, 50 entries, 1 second a batch
+dev/flpwp.sh eval-file dev/fixture/files-check.php pause     # one unit per batch
+dev/flpwp.sh eval-file dev/fixture/files-check.php settings  # scan_files on, off, off mid-pass, upgrade shape
+dev/flpwp.sh eval-file dev/fixture/files-check.php display   # Where Used, who sees what, Replace Media
+dev/flpwp.sh eval-file dev/fixture/files-check.php notices   # not scanned, changed, not read
+dev/flpwp.sh eval-file dev/fixture/files-teardown.php
+dev/flpwp.sh eval-file dev/fixture/replace-reindex.php       # Replace Media re-indexes, cleans up itself
+dev/flpwp.sh eval-file dev/fixture/replace-slash.php         # cleans up itself
+dev/flpwp.sh eval-file dev/fixture/perms-check.php           # cleans up itself
+```
+
+Then the design fixture (seed, check, teardown, and the batch path with `noindex`),
+`design-upgrade-check.php`, and the main fixture above (harness mu-plugin, `seed.php`, a
+`--reset` scan, `check.php`, `teardown.php`, remove the harness).
+
+- The seed writes real files into FLP's themes, plugins and mu-plugins folders and never
+  activates them. Everything it makes is recorded in the option `unmamfix_files`, and the
+  teardown reads that. Fixture names start with `unmamfix` / `unmam-fixture`.
+- Any `files-check.php` mode that edits, adds or deletes fixture files puts them back before it
+  exits, and the teardown copes with paths that are already gone.
+- The default mode allows 5,000 batches. `tiny` and `pause` allow 50,000 and fail if the scan
+  position has not moved for 50 batches in a row.
+- `files-check.php display` calls the manager directly for Replace Media, so it does not cover
+  the AJAX permission checks. `perms-check.php` does: it makes two authors and an editor
+  (`unmamfix_*` logins, `example.invalid` emails), a draft post and two images for each author
+  per case, and runs every media AJAX handler as each of them (Replace Media, bulk delete,
+  attach, detach, mark safe and unused, the upload.php bulk menu, the media modal, and the plugin
+  page's trash, restore and delete). It impersonates an existing administrator in memory only.
+  It needs no setup, removes everything it made in a `finally` block even on failure, and ends
+  by asserting no user, post or file is left.
+- `acf-seed.php` is not part of this run; it needs ACF copied in.
+
+Real site, not a fixture: export the previous tag with `git archive`, sync it into FLP, scan with
+`--reset`, and save `UNMAM_Database::get_all_unused_attachment_ids()`. Sync the new build, scan
+again, and diff the two lists in both directions. Every image that left the list needs a
+`wp unmam usage <id>` and a look at the named file. An image that entered the list is a
+regression. On 1.4.0 the files step took 4.6 seconds in 37 batches over 7,356 entries; 88
+images left the unused list (all in the active theme's `data/` and `tools/backups/` JSON) and
+none entered.
 
 ## Design content fixture (1.3.3)
 
@@ -190,4 +241,4 @@ dev/flpwp.sh plugin check unattached-media-manager --require=dev/plugin-check.ph
 Compare against the previous tag rather than reading the list cold: `git archive <tag>` into a
 temp dir, sync that, run the same command, and diff the counts per code. 1.3.1 and 1.3.2 both
 show 279 rows and the same four `PreparedSQL.NotPrepared` errors listed in `ROADMAP.md`. So
-does 1.3.3.
+does 1.3.3. 1.4.0 adds no new error or warning against 1.3.3.

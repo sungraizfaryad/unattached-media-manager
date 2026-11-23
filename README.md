@@ -35,7 +35,7 @@ This plugin scans the whole site, finds every place media is actually referenced
 
 ## Features
 
-- **Comprehensive scanning** across post content, featured images, Gutenberg blocks, ACF, Elementor, Meta Box, WooCommerce, SEO plugins, widgets, theme options and custom database tables
+- **Comprehensive scanning** across post content, featured images, Gutenberg blocks, ACF, Elementor, Meta Box, WooCommerce, SEO plugins, widgets, theme options, theme and plugin files and custom database tables
 - **Fix unattached media** in one click
 - **Media Library integration** showing a usage count and a "Where Used" panel per file
 - **Safe deletion** with trash, restore and permanent delete
@@ -60,6 +60,7 @@ This plugin scans the whole site, finds every place media is actually referenced
 | Widgets | Image widgets, text widgets, custom HTML |
 | Theme options | Customizer settings, theme mods, custom logos |
 | Options table | Plugin settings storing media IDs or URLs |
+| Theme and plugin files | Stylesheets, block theme templates, theme settings files, and image URLs or IDs written out in theme or plugin code. Read only, on by default |
 | Custom database tables | Opt-in, schema validated, read only |
 | Video and audio | HTML5 elements, poster images, source tags |
 | Responsive images | srcset and lazy-loading data attributes |
@@ -93,7 +94,7 @@ wp plugin activate unattached-media-manager
 
 Read this part. It is the one that costs people files.
 
-**"Unused" means "no reference found", not "safe to delete".** The scanner reads your database. It cannot see media referenced in theme or plugin PHP files, CSS background images, images injected by JavaScript, or anything used outside the site entirely such as email campaigns or PDFs.
+**"Unused" means "no reference found", not "safe to delete".** The scanner reads your database, and since 1.4.0 your theme and plugin files too. An image whose URL or ID is written out in a stylesheet, a block theme template or theme code is found. It cannot see an image URL that a theme builds in code, which most themes do, images injected by JavaScript, or anything used outside the site entirely such as email campaigns or PDFs.
 
 **Trashing media does not break anything, and that is not a bug.** Moving media to the trash only changes its status. The file stays on the server and images already placed in your content keep displaying. So you cannot trash a batch of files, browse the site for broken images, and conclude the rest were safe. Nothing will look broken either way. Images only break after a permanent delete, which is too late to learn from.
 

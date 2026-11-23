@@ -54,39 +54,21 @@ Spec: `dev/specs/2026-11-22-design-content-scanning-design.md`.
 
 ---
 
-## 1.4.0 — Filesystem scanning
+## 1.4.0 — Filesystem scanning (BUILT, NOT SHIPPED)
 
-**Why:** the plugin cannot see media referenced from files, only from the database. CSS
-`background-image` rules are the common real case. Raised by @adeqx, who had several GB of
-history to audit and could not trust the unused list.
+Built on `feature/1.4.0-file-scanning` and tested on FLP. Not merged, not deployed. The design
+that was built is `dev/specs/2026-11-22-file-scanning-design.md`, which supersedes the outline
+that used to sit here: a one-theme-or-plugin-at-a-time walk with a cursor instead of a stored
+manifest, so there are no sharded options to clean up. The plan is
+`dev/plans/2026-11-22-file-scanning.md`.
 
-### Temper the expectation
+**Why:** the plugin could not see media referenced from files, only from the database. Raised
+by @adeqx and @galbaras. Most themes build image URLs in code, which a text scan cannot see.
+The changelog and readme say so plainly.
 
-An earlier estimate that this recovers ~70% of what a full page crawl would find is too
-optimistic, and the review was right to push back. Most theme code builds URLs dynamically
-through `get_template_directory_uri()` or `wp_get_attachment_image()`, and a grep for
-literal upload URLs will not see any of that. The genuine win is stylesheets. Say that
-plainly in the changelog rather than overselling it.
-
-### Shape
-
-- A new opt-in scan type, appended last in the chain so the fast steps finish first.
-- Two phases, because directory listing order is not stable across requests and a recursive
-  walk cannot be resumed by offset: build a file manifest once, store it, then page through
-  it with the cursor.
-- Scan roots: `wp-content/themes`, `wp-content/plugins`, `wp-content/mu-plugins`. Never
-  `wp-admin` or `wp-includes`. Scanning `.css` inside `uploads` should be a separate opt-in,
-  default off.
-- Skip `node_modules`, `vendor`, `.git`, minified bundles and anything over a size cap.
-- **Symlink loop protection is required** and was missing from the original plan.
-- Extract the shared regex into `UNMAM_Reference_Extractor` and have the custom-table parser
-  delegate to it, so there is one copy.
-- `source_type` for these rows must not be `post`, and they must never auto-attach.
-- `uninstall.php` must clean the sharded manifest options; the existing exact-name list and
-  the transient wildcard will not catch them.
-- The REST `/scan/batch` enum already reads `get_active_scan_types()` (since 1.3.0); nothing to add there.
-
-**Estimate:** about two days.
+The same release fixes Replace Media moving rows it could not change, puts permission checks on
+the usage lookup and on every media action (Replace Media is administrators only), and adds the
+`scan_files` setting, on by default.
 
 ---
 
@@ -97,6 +79,17 @@ plainly in the changelog rather than overselling it.
   (`class-unmam-database.php` 555, 557, 571) and one in
   `class-unmam-custom-table-parser.php:157`. All four are dynamically built SQL with the
   values bound separately, which is why they were left alone.
+- **Options and terms steps have the late-batch race the files step avoids.** `scan_options()`
+  and `scan_terms_batch()` rewind their cursor when the stored status is `completed`. The browser
+  batch endpoint takes no lock while the minute cron keeps running, so a late duplicate batch
+  after the last one finished rewinds the step and re-reads from the start. Their first batch is
+  cheap to redo, so it was left. The fix is the one the files step uses: rewind in `full_scan()`.
+- `uninstall.php` does not delete `unmam_process_lock` or `unmam_process_key`. Both are real
+  options the background processor creates.
+- `uninstall.php` reads `get_sites()` with its default limit, so a network over 100 sites is only
+  cleaned for the first 100. Page through it.
+- The media grid's Where Used panel shows source post titles without an `edit_post` check on each
+  source post. 1.4.0 checks the attachment, not the posts it is used in.
 - The admin page heading still reads "All-in-One Media Solution", the plugin's original name.
   User visible, unlike the internal prefixes, which are deliberate.
 - `unmam_bulk_delete_unused` is registered but nothing in the admin JS calls it.
