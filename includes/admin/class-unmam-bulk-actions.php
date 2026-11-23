@@ -83,7 +83,7 @@ class UNMAM_Bulk_Actions {
         switch ( $action ) {
             case 'unmam_mark_safe':
                 foreach ( $post_ids as $post_id ) {
-                    if ( $manager->mark_safe( $post_id ) ) {
+                    if ( '' === $this->item_error( $post_id ) && $manager->mark_safe( $post_id ) ) {
                         $count++;
                     }
                 }
@@ -92,7 +92,7 @@ class UNMAM_Bulk_Actions {
 
             case 'unmam_unmark_safe':
                 foreach ( $post_ids as $post_id ) {
-                    if ( $manager->unmark_safe( $post_id ) ) {
+                    if ( '' === $this->item_error( $post_id ) && $manager->unmark_safe( $post_id ) ) {
                         $count++;
                     }
                 }
@@ -101,7 +101,7 @@ class UNMAM_Bulk_Actions {
 
             case 'unmam_mark_unused':
                 foreach ( $post_ids as $post_id ) {
-                    if ( $manager->mark_unused( $post_id ) ) {
+                    if ( '' === $this->item_error( $post_id ) && $manager->mark_unused( $post_id ) ) {
                         $count++;
                     }
                 }
@@ -109,7 +109,10 @@ class UNMAM_Bulk_Actions {
                 break;
 
             case 'unmam_detach':
-                $results = $manager->bulk_detach( $post_ids );
+                $allowed = array_filter( $post_ids, function ( $post_id ) {
+                    return '' === $this->item_error( $post_id );
+                } );
+                $results = $manager->bulk_detach( $allowed );
                 $count   = count( $results['success'] );
                 $redirect_to = add_query_arg( 'unmam_detached', $count, $redirect_to );
                 break;
@@ -200,6 +203,23 @@ class UNMAM_Bulk_Actions {
     }
 
     /**
+     * Why the current user may not act on this attachment, or '' when they may.
+     *
+     * @param int    $attachment_id Attachment ID.
+     * @param string $cap           Capability to check on the item.
+     * @return string
+     */
+    private function item_error( $attachment_id, $cap = 'edit_post' ) {
+        if ( 'attachment' !== get_post_type( $attachment_id ) ) {
+            return __( 'Invalid attachment ID.', 'unattached-media-manager' );
+        }
+        if ( ! current_user_can( $cap, $attachment_id ) ) {
+            return __( 'Permission denied', 'unattached-media-manager' );
+        }
+        return '';
+    }
+
+    /**
      * AJAX: Bulk attach
      */
     public function ajax_bulk_attach() {
@@ -216,13 +236,30 @@ class UNMAM_Bulk_Actions {
             wp_send_json_error( 'Invalid parameters' );
         }
 
+        $can_edit_post = current_user_can( 'edit_post', $post_id );
+        $allowed       = array();
+        $errors        = array();
+
+        foreach ( $attachment_ids as $id ) {
+            $error = $this->item_error( $id );
+            if ( '' === $error && ! $can_edit_post ) {
+                $error = __( 'Permission denied', 'unattached-media-manager' );
+            }
+            if ( '' === $error ) {
+                $allowed[] = $id;
+            } else {
+                $errors[ $id ] = $error;
+            }
+        }
+
         $manager = UNMAM_Attachment_Manager::instance();
-        $results = $manager->bulk_attach( $attachment_ids, $post_id );
+        $results = $manager->bulk_attach( $allowed, $post_id );
+        $errors  = $errors + $results['errors'];
 
         wp_send_json_success( array(
             'success_count' => count( $results['success'] ),
-            'error_count'   => count( $results['errors'] ),
-            'errors'        => $results['errors'],
+            'error_count'   => count( $errors ),
+            'errors'        => $errors,
         ) );
     }
 
@@ -242,13 +279,26 @@ class UNMAM_Bulk_Actions {
             wp_send_json_error( 'No attachments specified' );
         }
 
+        $allowed = array();
+        $errors  = array();
+
+        foreach ( $attachment_ids as $id ) {
+            $error = $this->item_error( $id );
+            if ( '' === $error ) {
+                $allowed[] = $id;
+            } else {
+                $errors[ $id ] = $error;
+            }
+        }
+
         $manager = UNMAM_Attachment_Manager::instance();
-        $results = $manager->bulk_detach( $attachment_ids );
+        $results = $manager->bulk_detach( $allowed );
+        $errors  = $errors + $results['errors'];
 
         wp_send_json_success( array(
             'success_count' => count( $results['success'] ),
-            'error_count'   => count( $results['errors'] ),
-            'errors'        => $results['errors'],
+            'error_count'   => count( $errors ),
+            'errors'        => $errors,
         ) );
     }
 
@@ -270,15 +320,22 @@ class UNMAM_Bulk_Actions {
 
         $manager = UNMAM_Attachment_Manager::instance();
         $count   = 0;
+        $errors  = array();
 
         foreach ( $attachment_ids as $id ) {
+            $error = $this->item_error( $id );
+            if ( '' !== $error ) {
+                $errors[ $id ] = $error;
+                continue;
+            }
             if ( $manager->mark_safe( $id ) ) {
                 $count++;
             }
         }
 
         wp_send_json_success( array(
-            'count' => $count,
+            'count'  => $count,
+            'errors' => $errors,
         ) );
     }
 
@@ -300,15 +357,22 @@ class UNMAM_Bulk_Actions {
 
         $manager = UNMAM_Attachment_Manager::instance();
         $count   = 0;
+        $errors  = array();
 
         foreach ( $attachment_ids as $id ) {
+            $error = $this->item_error( $id );
+            if ( '' !== $error ) {
+                $errors[ $id ] = $error;
+                continue;
+            }
             if ( $manager->mark_unused( $id ) ) {
                 $count++;
             }
         }
 
         wp_send_json_success( array(
-            'count' => $count,
+            'count'  => $count,
+            'errors' => $errors,
         ) );
     }
 
@@ -334,6 +398,11 @@ class UNMAM_Bulk_Actions {
         $errors  = array();
 
         foreach ( $attachment_ids as $id ) {
+            $error = $this->item_error( $id, 'delete_post' );
+            if ( '' !== $error ) {
+                $errors[ $id ] = $error;
+                continue;
+            }
             $result = $manager->safe_delete( $id, $force_delete );
             if ( is_wp_error( $result ) ) {
                 $errors[ $id ] = $result->get_error_message();
@@ -354,7 +423,7 @@ class UNMAM_Bulk_Actions {
     public function ajax_replace_attachment() {
         check_ajax_referer( 'unmam_admin_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'edit_posts' ) ) {
+        if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( 'Unauthorized' );
         }
 

@@ -273,6 +273,20 @@ class UNMAM_Media_Modal {
     }
 
     /**
+     * Stop with an error unless the id is an attachment the current user can edit.
+     *
+     * @param int $attachment_id Attachment ID.
+     */
+    private function require_attachment_access( $attachment_id ) {
+        if ( 'attachment' !== get_post_type( $attachment_id ) ) {
+            wp_send_json_error( __( 'Invalid attachment ID.', 'unattached-media-manager' ) );
+        }
+        if ( ! current_user_can( 'edit_post', $attachment_id ) ) {
+            wp_send_json_error( __( 'Permission denied', 'unattached-media-manager' ) );
+        }
+    }
+
+    /**
      * AJAX: Attach to post
      */
     public function ajax_attach_to_post() {
@@ -287,6 +301,11 @@ class UNMAM_Media_Modal {
 
         if ( ! $attachment_id || ! $post_id ) {
             wp_send_json_error( 'Invalid parameters' );
+        }
+
+        $this->require_attachment_access( $attachment_id );
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            wp_send_json_error( __( 'Permission denied', 'unattached-media-manager' ) );
         }
 
         $result = UNMAM_Attachment_Manager::instance()->attach( $attachment_id, $post_id );
@@ -316,6 +335,8 @@ class UNMAM_Media_Modal {
             wp_send_json_error( 'Invalid attachment ID' );
         }
 
+        $this->require_attachment_access( $attachment_id );
+
         $result = UNMAM_Attachment_Manager::instance()->detach( $attachment_id );
 
         if ( is_wp_error( $result ) ) {
@@ -343,6 +364,8 @@ class UNMAM_Media_Modal {
             wp_send_json_error( 'Invalid attachment ID' );
         }
 
+        $this->require_attachment_access( $attachment_id );
+
         UNMAM_Attachment_Manager::instance()->mark_safe( $attachment_id );
 
         wp_send_json_success( array(
@@ -365,6 +388,8 @@ class UNMAM_Media_Modal {
         if ( ! $attachment_id ) {
             wp_send_json_error( 'Invalid attachment ID' );
         }
+
+        $this->require_attachment_access( $attachment_id );
 
         UNMAM_Attachment_Manager::instance()->unmark_safe( $attachment_id );
 
