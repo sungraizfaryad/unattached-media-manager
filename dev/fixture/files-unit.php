@@ -168,6 +168,13 @@ try {
 		// Size guard.
 		$ok( array() === UNMAM_Reference_Extractor::find_candidates( str_repeat( ' ', 1048577 ) . $u1 ), 'over MAX_TEXT_LENGTH returns nothing' );
 		$ok( 1 === count( UNMAM_Reference_Extractor::find_candidates( str_repeat( ' ', 1048576 - strlen( $u1 ) ) . $u1 ) ), 'exactly MAX_TEXT_LENGTH still scanned' );
+		$inc = false;
+		UNMAM_Reference_Extractor::find_candidates( str_repeat( ' ', 1048577 ) . $u1, array(), $inc );
+		$ok( true === $inc, 'over MAX_TEXT_LENGTH sets incomplete' );
+		$inc = false;
+		UNMAM_Reference_Extractor::find_candidates( str_repeat( ' ', 1048576 - strlen( $u1 ) ) . $u1, array(), $inc );
+		$ok( false === $inc, 'exactly MAX_TEXT_LENGTH leaves incomplete alone' );
+		$ok( array() === UNMAM_Reference_Extractor::extract_from_text( str_repeat( ' ', 1048577 ) . $u1 ), 'extract_from_text: over MAX_TEXT_LENGTH still returns nothing' );
 	} );
 	$section( 'walker', function () use ( $ok ) {
 		$root = trailingslashit( get_temp_dir() ) . 'unmamfix-walk-' . getmypid();
@@ -359,6 +366,7 @@ try {
 
 		// Piece arithmetic.
 		$ok( 1048576 === UNMAM_File_Scanner::PIECE_BYTES && 4096 === UNMAM_File_Scanner::OVERLAP_BYTES, 'piece constants' );
+		$ok( UNMAM_Reference_Extractor::MAX_TEXT_LENGTH === UNMAM_File_Scanner::PIECE_BYTES, 'a piece is never longer than the extractor will search' );
 		$ok( array() === UNMAM_File_Scanner::piece_ranges( 0 ), 'ranges: empty file' );
 		foreach ( array( 10, 1048576, 1048577, 3000000 ) as $size ) {
 			$r    = UNMAM_File_Scanner::piece_ranges( $size );

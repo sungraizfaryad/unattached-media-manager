@@ -508,12 +508,15 @@ try {
 } finally {
 	wp_set_current_user( $admin_id );
 	foreach ( $made['posts'] as $pid ) {
-		wp_clear_scheduled_hook( 'unmam_index_single_post', array( $pid ) );
 		wp_delete_post( $pid, true );
 	}
 	foreach ( $made['attachments'] as $att ) {
 		UNMAM_Database::delete_references_by_attachment( $att );
 		wp_delete_attachment( $att, true );
+	}
+	// Meta updates and deletes queue a re-index per id, and deleting queues more, so clear last.
+	foreach ( array_merge( $made['posts'], $made['attachments'] ) as $id ) {
+		wp_clear_scheduled_hook( 'unmam_index_single_post', array( $id ) );
 	}
 	foreach ( $made['users'] as $uid ) {
 		wp_delete_user( $uid );

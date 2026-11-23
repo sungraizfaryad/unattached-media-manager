@@ -98,12 +98,13 @@ class UNMAM_Reference_Extractor {
      *   tails     Paths that start at the uploads folder name, as in `../../uploads/2024/a.jpg`.
      *   calls     Literal IDs in core attachment function calls.
      *
-     * A regex that fails (PCRE gives up on a hostile blob) leaves its pass out of the result.
-     * Pass $incomplete to learn that: it is set to true then, and never set back to false.
+     * A regex that fails (PCRE gives up on a hostile blob) leaves its pass out of the result,
+     * and a text over MAX_TEXT_LENGTH is not searched at all. Pass $incomplete to learn that:
+     * it is set to true then, and never set back to false.
      *
      * @param string    $text       Text to scan.
      * @param array     $options    See above.
-     * @param bool|null $incomplete Set to true when any pattern match failed.
+     * @param bool|null $incomplete Set to true when any pattern match failed or the text was too long.
      * @return array List of array( 'type' => 'id'|'url'|'exact_url', 'value' => int|string ),
      *               in the order found and without repeats. Empty for an oversized blob.
      */
@@ -182,7 +183,12 @@ class UNMAM_Reference_Extractor {
      * @return array
      */
     private static function collect( $text, $options, &$incomplete = null ) {
-        if ( '' === $text || strlen( $text ) > self::MAX_TEXT_LENGTH ) {
+        if ( '' === $text ) {
+            return array();
+        }
+
+        if ( strlen( $text ) > self::MAX_TEXT_LENGTH ) {
+            $incomplete = true;
             return array();
         }
 

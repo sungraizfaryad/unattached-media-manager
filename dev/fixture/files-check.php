@@ -10,9 +10,11 @@
  *   display   Where Used for file rows: titles, who sees what, Replace Media, with a temporary
  *             author and contributor and the fixture plugin folder removed for a moment
  *   notices   the not-scanned, changed and not-read notices, and the hooks that set "changed"
+ *   boundary  batches that die on the first file of the next component, started from the last
+ *             file of the one before it, must still end in a "stopped" skip
  *
  * Every mode puts settings and fixture files back before it exits.
- * Run: dev/flpwp.sh eval-file dev/fixture/files-check.php [tiny|pause|settings|display|notices]
+ * Run: dev/flpwp.sh eval-file dev/fixture/files-check.php [tiny|pause|settings|display|notices|boundary]
  */
 
 $mode = empty( $args ) ? '' : $args[0];
@@ -572,6 +574,89 @@ if ( 'notices' === $mode ) {
 	return;
 }
 
+if ( 'boundary' === $mode ) {
+	echo "-- boundary\n";
+	$plugin_key  = 'plugin:unmam-fixture-plugin';
+	$first_file  = 'unmam-fixture-plugin.php';
+	$dying       = false;
+	$die_on_read = function ( $dirs ) use ( &$dying ) {
+		if ( $dying ) {
+			throw new RuntimeException( 'unmamfix: the batch died' );
+		}
+		return $dirs;
+	};
+
+	try {
+		$set_settings( array( 'scan_files' => true ) );
+
+		UNMAM_Database::reset_scan_progress( 'files' );
+		delete_option( UNMAM_File_Scanner::STATE_OPTION );
+		$override = array( 'files' => 1, 'seconds' => 0 );
+		$scanner->run_batch( 'files' );
+		$override = array();
+
+		$state = $state_of();
+		$index = -1;
+		foreach ( $state['components'] as $i => $component ) {
+			if ( $plugin_key === $component['key'] ) {
+				$index = $i;
+			}
+		}
+		$ok( $index > 0, 'boundary: the fixture plugin is in the component list, with one before it' );
+
+		// The last file of the component just before the fixture plugin, so the next batch finishes
+		// that component, moves on, and dies on the first file of the fixture plugin.
+		$before = $state['components'][ $index - 1 ];
+		$files  = UNMAM_File_Walker::walk( $before['root'], '', 1000000, 1000000 )['files'];
+		$ok( (bool) $files, 'boundary: the component before it has files (' . $before['key'] . ')' );
+
+		$state['index']      = $index - 1;
+		$state['path']       = $files ? end( $files ) : '';
+		$state['candidate']  = 0;
+		$state['size']       = 0;
+		$state['mtime']      = 0;
+		$state['attempt_at'] = '';
+		$state['attempts']   = 0;
+		update_option( UNMAM_File_Scanner::STATE_OPTION, $state, false );
+
+		add_filter( 'upload_dir', $die_on_read );
+		$died  = 0;
+		$moved = false;
+		$dying = true;
+		for ( $n = 1; $n <= 6; $n++ ) {
+			try {
+				$scanner->run_batch( 'files' );
+			} catch ( RuntimeException $e ) {
+				$died++;
+			}
+			if ( 1 === $n ) {
+				$after_first = $state_of();
+				$moved       = $plugin_key === $state['components'][ $after_first['index'] ]['key'] && '' === $after_first['path'];
+			}
+		}
+		$dying = false;
+
+		$stopped = array_filter( UNMAM_File_Scanner::skipped()['items'], function ( $item ) use ( $plugin_key, $first_file ) {
+			return 'stopped' === $item['reason'] && $plugin_key === $item['key'] && $first_file === $item['path'];
+		} );
+		$ok( $died >= 5, "boundary: the batches died on the first read ($died of 6)" );
+		$ok( $moved, 'boundary: the first dead batch saved the fixture plugin as the position' );
+		$ok( (bool) $stopped, 'boundary: the first file of the fixture plugin is reported as stopped' );
+
+		$done = $finish();
+		$ok( $done, 'boundary: the files step completes once the batches stop dying' );
+		$ok( 'completed' === UNMAM_Database::get_scan_progress( 'files' )['status'], 'boundary: the files step is marked completed' );
+	} finally {
+		$dying = false;
+		remove_filter( 'upload_dir', $die_on_read );
+		update_option( 'unmam_settings', $saved_settings );
+	}
+
+	$ok( ! $notices, 'no notices or warnings from the plugin' . ( $notices ? ': ' . $notices[0] : '' ) );
+	echo "\nfailures: $fail\n";
+	return;
+}
+
 if ( 'settings' !== $mode ) {
 	// Mode limits.
 	if ( 'tiny' === $mode ) {
@@ -903,6 +988,27 @@ if ( 'settings' !== $mode ) {
 			$ok( (bool) $stopped, 'fifth attempt skips the component: reported as stopped, keyed to the theme' );
 			$ok( $after['index'] > $theme_index && 0 === $after['attempts'], 'fifth attempt skips the component: moved to the next one, attempts cleared' );
 			$ok( 0 === $file_rows_for( $fx['found']['n10a'] ) && 0 === $file_rows_for( $fx['found']['n10b'] ) && 0 === $file_rows_for( $fx['found']['cssabs'] ) && 0 === $file_rows_for( $fx['found']['sidebar'] ), 'fifth attempt skips the component: none of its files were read, not even the first ones in order' );
+
+			echo "-- fifth attempt skips the component, cursor inside it\n";
+			$start_at_fixture( array( 'files' => 1 ) );
+			$state               = $one_batch();
+			$theme_index         = $state['index'];
+			$state['attempt_at'] = $state['index'] . '|' . $state['path'] . '|' . $state['candidate'];
+			$state['attempts']   = 4;
+			update_option( UNMAM_File_Scanner::STATE_OPTION, $state, false );
+			$after = $one_batch();
+			$items = UNMAM_File_Scanner::skipped()['items'];
+			$whole = array_values( array_filter( $items, function ( $item ) use ( $theme ) {
+				return 'stopped' === $item['reason'] && $theme === $item['key'] && '' === $item['path'];
+			} ) );
+			$ok( '' !== $state['path'], 'component skip, cursor inside: the cursor was on a file' );
+			$ok( 1 === count( $whole ), 'component skip, cursor inside: recorded once as the rest of the component, path empty' );
+			$ok( ! array_filter( $items, function ( $item ) use ( $theme, $state ) {
+				return $theme === $item['key'] && $state['path'] === $item['path'];
+			} ), 'component skip, cursor inside: the file the cursor was on is not named' );
+			$ok( $after['index'] > $theme_index && 0 === $after['attempts'], 'component skip, cursor inside: moved to the next component, attempts cleared' );
+			$line = $whole ? UNMAM_File_Scanner::skipped_line( $whole[0] ) : '';
+			$ok( '' !== $line && false === strpos( $line, '|' ) && ': stopped the scan' === substr( $line, -18 ), 'component skip, cursor inside: reads as "<Component>: stopped the scan" (' . $line . ')' );
 
 			echo "-- a find that cannot be written\n";
 			$start_at_fixture( array() );

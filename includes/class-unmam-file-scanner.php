@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class UNMAM_File_Scanner {
 
-    const PIECE_BYTES   = 1048576; // Same as UNMAM_Reference_Extractor::MAX_TEXT_LENGTH.
+    const PIECE_BYTES   = UNMAM_Reference_Extractor::MAX_TEXT_LENGTH;
     const OVERLAP_BYTES = 4096;
 
     const CONTEXTS = array(
@@ -797,7 +797,7 @@ class UNMAM_File_Scanner {
      */
     private static function skip_stuck_component( array &$state ): void {
         if ( isset( $state['components'][ $state['index'] ] ) ) {
-            self::note_skipped( $state, $state['components'][ $state['index'] ]['key'], $state['path'], 'stopped' );
+            self::note_skipped( $state, $state['components'][ $state['index'] ]['key'], '', 'stopped' );
             self::next_component( $state );
         }
 
@@ -953,6 +953,10 @@ class UNMAM_File_Scanner {
         $state['candidate'] = 0;
         $state['size']      = 0;
         $state['mtime']     = 0;
+
+        // Saved now: a batch that dies on this component's first file has to count its attempts
+        // against this position, not the last file of the one before.
+        self::save_state( $state );
     }
 
     /**
